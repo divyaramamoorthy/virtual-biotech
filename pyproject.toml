@@ -1,0 +1,56 @@
+[project]
+name = "virtual-biotech"
+version = "0.1.0"
+description = "Multi-agent AI framework for computational drug discovery"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.40.0",
+    "claude-agent-sdk>=0.1.0",
+    "fastmcp>=2.0.0",
+    "statsmodels>=0.14.0",
+    "scipy>=1.11.0",
+    "lifelines>=0.27.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.24.0",
+    "python-dotenv>=1.2.2",
+    "streamlit>=1.55.0",
+]
+
+[project.optional-dependencies]
+bio = [
+    "scanpy>=1.9.0",
+    "anndata>=0.10.0",
+    "cellxgene-census>=1.0.0",
+    "cell2location>=0.1.0",
+    "liana>=1.0.0",
+    "decoupler>=1.6.0",
+    "pydeseq2>=0.4.0",
+]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+virtual-biotech = "virtual_biotech.orchestrator:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/virtual_biotech"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
