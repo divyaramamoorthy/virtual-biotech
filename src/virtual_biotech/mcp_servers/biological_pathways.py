@@ -5,6 +5,20 @@ from fastmcp import FastMCP
 
 mcp = FastMCP("biological-pathways")
 
+_GO_ASPECTS = {"biological_process", "molecular_function", "cellular_component"}
+
+
+def _resolve_to_uniprot(gene_symbol: str) -> str | None:
+    """Resolve a human gene symbol to its primary UniProt accession."""
+    url = f"https://rest.uniprot.org/uniprotkb/search?query=gene_exact:{gene_symbol}+AND+organism_id:9606&format=json&size=1"
+    try:
+        response = httpx.get(url, timeout=30)
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        return results[0]["primaryAccession"] if results else None
+    except Exception:
+        return None
+
 
 @mcp.tool()
 def get_reactome_pathways(gene_symbol: str) -> dict:
@@ -17,15 +31,7 @@ def get_reactome_pathways(gene_symbol: str) -> dict:
         Dictionary with pathway hierarchy, top-level categories,
         and pathway details.
     """
-    # Resolve to UniProt
-    uniprot_url = f"https://rest.uniprot.org/uniprotkb/search?query=gene_exact:{gene_symbol}+AND+organism_id:9606&format=json&size=1"
-    try:
-        response = httpx.get(uniprot_url, timeout=30)
-        response.raise_for_status()
-        results = response.json().get("results", [])
-        uniprot_id = results[0]["primaryAccession"] if results else None
-    except Exception:
-        uniprot_id = None
+    uniprot_id = _resolve_to_uniprot(gene_symbol)
 
     if not uniprot_id:
         return {"gene_symbol": gene_symbol, "error": "UniProt ID not found"}
@@ -41,16 +47,10 @@ def get_reactome_pathways(gene_symbol: str) -> dict:
 
     # Get top-level pathways
     top_level = set()
-    pathway_details = []
+    pathway_details = [
+        {"id": p.get("stId", ""), "name": p.get("displayName", ""), "is_disease": p.get("isDisease", False)} for p in pathways
+    ]
     for p in pathways:
-        pathway_details.append(
-            {
-                "id": p.get("stId", ""),
-                "name": p.get("displayName", ""),
-                "is_disease": p.get("isDisease", False),
-            }
-        )
-        # Try to get top-level parent
         try:
             hier_url = f"https://reactome.org/ContentService/data/pathways/top/{p.get('stId', '')}"
             hier_resp = httpx.get(hier_url, headers={"Accept": "application/json"}, timeout=10)
@@ -89,17 +89,12 @@ def get_gene_ontology(gene_symbol: str) -> dict:
     try:
         response = httpx.get(url, params=params, headers={"Accept": "application/json"}, timeout=30)
         response.raise_for_status()
-        data = response.json()
-        annotations = data.get("results", [])
+        annotations = response.json().get("results", [])
     except Exception:
         annotations = []
 
-    go_terms: dict[str, list[dict]] = {
-        "biological_process": [],
-        "molecular_function": [],
-        "cellular_component": [],
-    }
-    seen = set()
+    go_terms: dict[str, list[dict]] = {aspect: [] for aspect in _GO_ASPECTS}
+    seen: set[str] = set()
 
     for ann in annotations:
         go_id = ann.get("goId", "")
@@ -108,14 +103,8 @@ def get_gene_ontology(gene_symbol: str) -> dict:
         seen.add(go_id)
 
         aspect = ann.get("goAspect", "")
-        aspect_key = {
-            "biological_process": "biological_process",
-            "molecular_function": "molecular_function",
-            "cellular_component": "cellular_component",
-        }.get(aspect, "")
-
-        if aspect_key:
-            go_terms[aspect_key].append(
+        if aspect in _GO_ASPECTS:
+            go_terms[aspect].append(
                 {
                     "go_id": go_id,
                     "name": ann.get("goName", ""),
@@ -155,18 +144,17 @@ def get_pathway_enrichment(gene_list: list[str]) -> dict:
     except Exception as e:
         return {"gene_list": gene_list, "error": str(e)}
 
-    pathways = []
-    for p in data.get("pathways", [])[:30]:
-        pathways.append(
-            {
-                "stable_id": p.get("stId", ""),
-                "name": p.get("name", ""),
-                "p_value": p.get("entities", {}).get("pValue"),
-                "fdr": p.get("entities", {}).get("fdr"),
-                "found": p.get("entities", {}).get("found"),
-                "total": p.get("entities", {}).get("total"),
-            }
-        )
+    pathways = [
+        {
+            "stable_id": p.get("stId", ""),
+            "name": p.get("name", ""),
+            "p_value": p.get("entities", {}).get("pValue"),
+            "fdr": p.get("entities", {}).get("fdr"),
+            "found": p.get("entities", {}).get("found"),
+            "total": p.get("entities", {}).get("total"),
+        }
+        for p in data.get("pathways", [])[:30]
+    ]
 
     return {
         "gene_list": gene_list,

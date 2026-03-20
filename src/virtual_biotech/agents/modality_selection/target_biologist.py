@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 TARGET_BIOLOGIST_PROMPT = """
 You are the Target Biologist Agent in the Modality Selection division.
 
@@ -17,6 +19,8 @@ YOUR TOOLS:
 - Open Targets tractability predictions
 - Chemical probe data
 - Bash/Python for custom analyses
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When assessing modality selection for a target:
@@ -39,11 +43,11 @@ MODALITY DECISION FRAMEWORK:
 - Secreted targets → antibodies, nanobodies
 """
 
-MCP_SERVER_NAMES = ["molecular_targets"]
+MCP_SERVER_NAMES = ["molecular_targets", "tissue_expression"]
 
 target_biologist_agent = AgentDefinition(
     description="Target Biologist for subcellular localization, protein family, and modality tractability analysis",
     prompt=TARGET_BIOLOGIST_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

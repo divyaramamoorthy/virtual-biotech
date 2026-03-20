@@ -5,6 +5,26 @@ from fastmcp import FastMCP
 
 mcp = FastMCP("molecular-targets")
 
+OT_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
+
+
+def _ot_search_ensembl(gene_symbol: str) -> str | None:
+    """Resolve a gene symbol to its Ensembl ID via Open Targets."""
+    query = """
+    query SearchTarget($queryString: String!) {
+        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
+            hits { id }
+        }
+    }
+    """
+    try:
+        response = httpx.post(OT_GRAPHQL, json={"query": query, "variables": {"queryString": gene_symbol}}, timeout=30)
+        response.raise_for_status()
+        hits = response.json().get("data", {}).get("search", {}).get("hits", [])
+        return hits[0]["id"] if hits else None
+    except Exception:
+        return None
+
 
 @mcp.tool()
 def get_protein_atlas_summary(gene_symbol: str) -> dict:
@@ -28,24 +48,17 @@ def get_protein_atlas_summary(gene_symbol: str) -> dict:
 
     if not data:
         # Use Open Targets for protein info
-        ot_url = "https://api.platform.opentargets.org/api/v4/graphql"
         query = """
         query TargetInfo($symbol: String!) {
             search(queryString: $symbol, entityNames: ["target"], page: {size: 1, index: 0}) {
-                hits {
-                    id
-                    name
-                    description
-                    entity
-                }
+                hits { id name description entity }
             }
         }
         """
         try:
-            response = httpx.post(ot_url, json={"query": query, "variables": {"symbol": gene_symbol}}, timeout=30)
+            response = httpx.post(OT_GRAPHQL, json={"query": query, "variables": {"symbol": gene_symbol}}, timeout=30)
             response.raise_for_status()
-            ot_data = response.json()
-            hits = ot_data.get("data", {}).get("search", {}).get("hits", [])
+            hits = response.json().get("data", {}).get("search", {}).get("hits", [])
             if hits:
                 data = {"source": "open_targets", "info": hits[0]}
         except Exception:
@@ -68,22 +81,7 @@ def get_tractability_assessment(gene_symbol: str) -> dict:
         Dictionary with tractability assessments for small molecule,
         antibody, PROTAC, and other modalities.
     """
-    # Use Open Targets tractability data
-    ot_url = "https://api.platform.opentargets.org/api/v4/graphql"
-    query = """
-    query Tractability($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
-    try:
-        response = httpx.post(ot_url, json={"query": query, "variables": {"queryString": gene_symbol}}, timeout=30)
-        response.raise_for_status()
-        hits = response.json().get("data", {}).get("search", {}).get("hits", [])
-        ensembl_id = hits[0]["id"] if hits else None
-    except Exception:
-        ensembl_id = None
+    ensembl_id = _ot_search_ensembl(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "error": "Target not found"}
@@ -102,7 +100,7 @@ def get_tractability_assessment(gene_symbol: str) -> dict:
     }
     """
     try:
-        response = httpx.post(ot_url, json={"query": tract_query, "variables": {"ensemblId": ensembl_id}}, timeout=30)
+        response = httpx.post(OT_GRAPHQL, json={"query": tract_query, "variables": {"ensemblId": ensembl_id}}, timeout=30)
         response.raise_for_status()
         target_data = response.json().get("data", {}).get("target", {})
         tractability = target_data.get("tractability", [])
@@ -112,10 +110,7 @@ def get_tractability_assessment(gene_symbol: str) -> dict:
     # Organize by modality
     by_modality: dict[str, list[dict]] = {}
     for t in tractability:
-        modality = t.get("modality", "unknown")
-        if modality not in by_modality:
-            by_modality[modality] = []
-        by_modality[modality].append({"label": t.get("label"), "value": t.get("value")})
+        by_modality.setdefault(t.get("modality", "unknown"), []).append({"label": t.get("label"), "value": t.get("value")})
 
     return {
         "gene_symbol": gene_symbol,
@@ -149,18 +144,17 @@ def get_mouse_ko_phenotypes(gene_symbol: str) -> dict:
     except Exception:
         docs = []
 
-    phenotypes = []
-    for doc in docs:
-        phenotypes.append(
-            {
-                "mp_term_name": doc.get("mp_term_name"),
-                "mp_term_id": doc.get("mp_term_id"),
-                "top_level_mp_term": doc.get("top_level_mp_term_name"),
-                "p_value": doc.get("p_value"),
-                "effect_size": doc.get("effect_size"),
-                "zygosity": doc.get("zygosity"),
-            }
-        )
+    phenotypes = [
+        {
+            "mp_term_name": doc.get("mp_term_name"),
+            "mp_term_id": doc.get("mp_term_id"),
+            "top_level_mp_term": doc.get("top_level_mp_term_name"),
+            "p_value": doc.get("p_value"),
+            "effect_size": doc.get("effect_size"),
+            "zygosity": doc.get("zygosity"),
+        }
+        for doc in docs
+    ]
 
     return {
         "gene_symbol": gene_symbol,
@@ -179,22 +173,7 @@ def get_chemical_probes(gene_symbol: str) -> dict:
     Returns:
         Dictionary with recommended probes, selectivity data, and usage notes.
     """
-    # Use Open Targets for chemical probe info
-    ot_url = "https://api.platform.opentargets.org/api/v4/graphql"
-    query = """
-    query ChemicalProbes($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
-    try:
-        response = httpx.post(ot_url, json={"query": query, "variables": {"queryString": gene_symbol}}, timeout=30)
-        response.raise_for_status()
-        hits = response.json().get("data", {}).get("search", {}).get("hits", [])
-        ensembl_id = hits[0]["id"] if hits else None
-    except Exception:
-        ensembl_id = None
+    ensembl_id = _ot_search_ensembl(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "error": "Target not found"}
@@ -215,7 +194,7 @@ def get_chemical_probes(gene_symbol: str) -> dict:
     }
     """
     try:
-        response = httpx.post(ot_url, json={"query": probe_query, "variables": {"ensemblId": ensembl_id}}, timeout=30)
+        response = httpx.post(OT_GRAPHQL, json={"query": probe_query, "variables": {"ensemblId": ensembl_id}}, timeout=30)
         response.raise_for_status()
         target_data = response.json().get("data", {}).get("target", {})
         probes = target_data.get("chemicalProbes", {}).get("rows", [])

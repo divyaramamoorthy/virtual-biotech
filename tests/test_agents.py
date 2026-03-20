@@ -97,3 +97,55 @@ class TestAgentDefinitions:
         for name, agent in CSO_SUB_AGENTS.items():
             assert agent.description, f"{name} has no description"
             assert len(agent.description) > 10, f"{name} description too short"
+
+
+class TestMCPToolNaming:
+    """Verify MCP tools use the SDK-namespaced mcp__<server>__<tool> convention."""
+
+    def test_tools_for_mcp_servers_uses_namespaced_format(self):
+        """tools_for_mcp_servers returns mcp__<server>__<tool> names."""
+        from virtual_biotech.config import tools_for_mcp_servers
+
+        tools = tools_for_mcp_servers(["human_genetics"])
+        assert len(tools) > 0
+        for tool in tools:
+            assert tool.startswith("mcp__human_genetics__"), f"Tool {tool} missing mcp__ namespace prefix"
+
+    def test_all_sub_agent_mcp_tools_are_namespaced(self):
+        """Every MCP tool in sub-agent definitions uses the mcp__ prefix."""
+        from virtual_biotech.agents.cso import CSO_SUB_AGENTS
+
+        non_mcp_tools = {"Bash", "WebSearch", "WebFetch"}
+        for name, agent in CSO_SUB_AGENTS.items():
+            for tool in agent.tools:
+                if tool not in non_mcp_tools:
+                    assert tool.startswith("mcp__"), (
+                        f"Agent '{name}' has non-namespaced MCP tool: '{tool}'. "
+                        f"Expected format: mcp__<server>__<tool>"
+                    )
+
+    def test_sub_agent_mcp_tools_reference_valid_servers(self):
+        """MCP tools in sub-agents reference servers that exist in MCP_SERVERS."""
+        from virtual_biotech.agents.cso import CSO_SUB_AGENTS
+        from virtual_biotech.config import MCP_SERVERS
+
+        non_mcp_tools = {"Bash", "WebSearch", "WebFetch"}
+        for name, agent in CSO_SUB_AGENTS.items():
+            for tool in agent.tools:
+                if tool in non_mcp_tools:
+                    continue
+                # Extract server name from mcp__<server>__<tool>
+                parts = tool.split("__")
+                assert len(parts) == 3, f"Agent '{name}' tool '{tool}' doesn't match mcp__<server>__<tool>"
+                server = parts[1]
+                assert server in MCP_SERVERS, (
+                    f"Agent '{name}' references MCP server '{server}' which is not in MCP_SERVERS"
+                )
+
+    def test_cso_agent_definition_has_no_mcp_tools(self):
+        """CSO AgentDefinition has no tools — it only delegates via Agent tool."""
+        from virtual_biotech.agents.cso import cso_agent
+
+        assert cso_agent.tools == [], "CSO should have no tools in its AgentDefinition"
+        for tool in cso_agent.tools:
+            assert not tool.startswith("mcp__"), "CSO must not have MCP tools"

@@ -6,6 +6,18 @@ from fastmcp import FastMCP
 mcp = FastMCP("biological-interactions")
 
 
+def _resolve_to_uniprot(gene_symbol: str) -> str | None:
+    """Resolve a human gene symbol to its primary UniProt accession."""
+    url = f"https://rest.uniprot.org/uniprotkb/search?query=gene_exact:{gene_symbol}+AND+organism_id:9606&format=json&size=1"
+    try:
+        response = httpx.get(url, timeout=30)
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        return results[0]["primaryAccession"] if results else None
+    except Exception:
+        return None
+
+
 @mcp.tool()
 def query_protein_interactions(gene_symbol: str, confidence_threshold: float = 0.7) -> dict:
     """Query STRING and IntAct for protein-protein interactions.
@@ -32,21 +44,20 @@ def query_protein_interactions(gene_symbol: str, confidence_threshold: float = 0
     except Exception:
         string_data = []
 
-    interactions = []
-    for item in string_data:
-        interactions.append(
-            {
-                "partner": item.get("preferredName_B", ""),
-                "score": item.get("score", 0),
-                "nscore": item.get("nscore", 0),
-                "fscore": item.get("fscore", 0),
-                "pscore": item.get("pscore", 0),
-                "ascore": item.get("ascore", 0),
-                "escore": item.get("escore", 0),
-                "dscore": item.get("dscore", 0),
-                "tscore": item.get("tscore", 0),
-            }
-        )
+    interactions = [
+        {
+            "partner": item.get("preferredName_B", ""),
+            "score": item.get("score", 0),
+            "nscore": item.get("nscore", 0),
+            "fscore": item.get("fscore", 0),
+            "pscore": item.get("pscore", 0),
+            "ascore": item.get("ascore", 0),
+            "escore": item.get("escore", 0),
+            "dscore": item.get("dscore", 0),
+            "tscore": item.get("tscore", 0),
+        }
+        for item in string_data
+    ]
 
     # IntAct API
     intact_url = f"https://www.ebi.ac.uk/intact/ws/interaction/findInteractor/{gene_symbol}"
@@ -78,16 +89,7 @@ def query_pathway_membership(gene_symbol: str) -> dict:
         Dictionary with pathways the gene participates in, including
         pathway hierarchy, diagram links, and associated diseases.
     """
-    # Map gene symbol to UniProt ID via UniProt
-    uniprot_url = f"https://rest.uniprot.org/uniprotkb/search?query=gene_exact:{gene_symbol}+AND+organism_id:9606&format=json&size=1"
-    try:
-        response = httpx.get(uniprot_url, timeout=30)
-        response.raise_for_status()
-        uniprot_data = response.json()
-        results = uniprot_data.get("results", [])
-        uniprot_id = results[0]["primaryAccession"] if results else None
-    except Exception:
-        uniprot_id = None
+    uniprot_id = _resolve_to_uniprot(gene_symbol)
 
     if not uniprot_id:
         return {"gene_symbol": gene_symbol, "error": "UniProt ID not found", "pathways": []}
@@ -101,16 +103,15 @@ def query_pathway_membership(gene_symbol: str) -> dict:
     except Exception:
         pathways_data = []
 
-    pathways = []
-    for pathway in pathways_data:
-        pathways.append(
-            {
-                "stable_id": pathway.get("stId", ""),
-                "name": pathway.get("displayName", ""),
-                "species": pathway.get("speciesName", ""),
-                "is_disease": pathway.get("isDisease", False),
-            }
-        )
+    pathways = [
+        {
+            "stable_id": p.get("stId", ""),
+            "name": p.get("displayName", ""),
+            "species": p.get("speciesName", ""),
+            "is_disease": p.get("isDisease", False),
+        }
+        for p in pathways_data
+    ]
 
     return {
         "gene_symbol": gene_symbol,
@@ -141,15 +142,9 @@ def query_signaling_network(gene_symbol: str) -> dict:
     except Exception:
         entries = []
 
-    signaling_pathways = []
-    for entry in entries[:20]:
-        signaling_pathways.append(
-            {
-                "stable_id": entry.get("stId", ""),
-                "name": entry.get("name", ""),
-                "species": entry.get("species", []),
-            }
-        )
+    signaling_pathways = [
+        {"stable_id": e.get("stId", ""), "name": e.get("name", ""), "species": e.get("species", [])} for e in entries[:20]
+    ]
 
     return {
         "gene_symbol": gene_symbol,

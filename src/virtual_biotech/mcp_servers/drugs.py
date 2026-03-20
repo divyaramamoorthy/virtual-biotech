@@ -44,18 +44,18 @@ def search_drugs_by_target(gene_symbol: str) -> dict:
         except Exception:
             activities = []
 
-        for act in activities:
-            drugs.append(
-                {
-                    "molecule_chembl_id": act.get("molecule_chembl_id"),
-                    "molecule_name": act.get("molecule_pref_name"),
-                    "pchembl_value": act.get("pchembl_value"),
-                    "standard_type": act.get("standard_type"),
-                    "standard_value": act.get("standard_value"),
-                    "standard_units": act.get("standard_units"),
-                    "assay_type": act.get("assay_type"),
-                }
-            )
+        drugs.extend(
+            {
+                "molecule_chembl_id": act.get("molecule_chembl_id"),
+                "molecule_name": act.get("molecule_pref_name"),
+                "pchembl_value": act.get("pchembl_value"),
+                "standard_type": act.get("standard_type"),
+                "standard_value": act.get("standard_value"),
+                "standard_units": act.get("standard_units"),
+                "assay_type": act.get("assay_type"),
+            }
+            for act in activities
+        )
 
     return {
         "gene_symbol": gene_symbol,
@@ -212,18 +212,17 @@ def search_chembl_compounds(target_id: str, activity_type: str = "IC50", max_res
     except Exception:
         activities = []
 
-    compounds = []
-    for act in activities:
-        compounds.append(
-            {
-                "molecule_chembl_id": act.get("molecule_chembl_id"),
-                "molecule_name": act.get("molecule_pref_name"),
-                "pchembl_value": act.get("pchembl_value"),
-                "standard_value": act.get("standard_value"),
-                "standard_units": act.get("standard_units"),
-                "assay_description": act.get("assay_description"),
-            }
-        )
+    compounds = [
+        {
+            "molecule_chembl_id": act.get("molecule_chembl_id"),
+            "molecule_name": act.get("molecule_pref_name"),
+            "pchembl_value": act.get("pchembl_value"),
+            "standard_value": act.get("standard_value"),
+            "standard_units": act.get("standard_units"),
+            "assay_description": act.get("assay_description"),
+        }
+        for act in activities
+    ]
 
     return {
         "target_id": target_id,

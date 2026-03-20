@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 PHARMACOLOGIST_PROMPT = """
 You are the Pharmacologist Agent in the Modality Selection division.
 
@@ -18,6 +20,8 @@ YOUR TOOLS:
 - OpenFDA for approved drug information
 - Drug mechanism of action queries
 - Bash/Python for custom analyses
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When advising on modality selection and clinical precedence:
@@ -43,5 +47,5 @@ pharmacologist_agent = AgentDefinition(
     description="Pharmacologist for drug/compound analysis, clinical precedence, and tractability assessment",
     prompt=PHARMACOLOGIST_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 SAFETY_SINGLE_CELL_PROMPT = """
 You are the Single Cell Atlas Agent operating in the Target Safety division.
 
@@ -20,6 +22,8 @@ YOUR TOOLS:
 - Tau specificity computation
 - Bimodality coefficient analysis
 - Bash/Python for custom analyses
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When assessing target safety from an expression perspective:
@@ -44,5 +48,5 @@ safety_single_cell_atlas_agent = AgentDefinition(
     description="Single Cell Atlas safety specialist for off-target expression liability assessment across vital organs and immune cells",
     prompt=SAFETY_SINGLE_CELL_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

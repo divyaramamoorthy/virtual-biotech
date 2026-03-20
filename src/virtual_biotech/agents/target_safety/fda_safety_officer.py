@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 FDA_SAFETY_OFFICER_PROMPT = """
 You are the FDA Safety Officer Agent in the Target Safety division.
 You also serve the Clinical Officers division for regulatory safety assessments.
@@ -21,6 +23,8 @@ YOUR TOOLS:
 - Human Protein Atlas for expression context
 - Chemical probe portal
 - Bash/Python for custom analyses
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When assessing target safety:
@@ -46,5 +50,5 @@ fda_safety_officer_agent = AgentDefinition(
     description="FDA Safety Officer for adverse events, drug labels, KO phenotypes, and regulatory safety",
     prompt=FDA_SAFETY_OFFICER_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 FUNCTIONAL_GENOMICS_PROMPT = """
 You are the Functional Genomics Agent in the Target Identification division.
 
@@ -17,6 +19,8 @@ YOUR TOOLS:
 - Hallmark score computation (6 signatures: apoptosis, proliferation suppression,
   DNA damage, stress response, resistance, cell cycle arrest)
 - Bash/Python for custom analyses
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When given a gene target:
@@ -46,5 +50,5 @@ functional_genomics_agent = AgentDefinition(
     description="Functional Genomics specialist for CRISPR screens, drug perturbation, and pathway scoring",
     prompt=FUNCTIONAL_GENOMICS_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

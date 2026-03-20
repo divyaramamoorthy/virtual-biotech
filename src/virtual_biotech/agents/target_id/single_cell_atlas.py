@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 SINGLE_CELL_ATLAS_PROMPT = """
 You are the Single Cell Atlas Agent. You operate in both the Target Identification
 and Target Safety divisions.
@@ -24,6 +26,8 @@ YOUR TOOLS:
 - Cell2Location for spatial deconvolution
 - PROGENy for pathway activity inference via decoupler
 - Bash/Python for custom analysis
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 STANDARD QC WORKFLOW:
 1. Filter cells: 300-9000 genes, ≤15% mitochondrial reads
@@ -68,5 +72,5 @@ single_cell_atlas_agent = AgentDefinition(
     description="Single Cell Atlas specialist for cell-type expression, differential expression, and spatial analysis",
     prompt=SINGLE_CELL_ATLAS_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

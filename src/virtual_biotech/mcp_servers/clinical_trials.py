@@ -8,6 +8,26 @@ mcp = FastMCP("clinical-trials")
 BASE_URL = "https://clinicaltrials.gov/api/v2"
 
 
+def _parse_event_list(events: list[dict]) -> list[dict]:
+    """Extract term, organ system, and stats from a list of AE event groups."""
+    return [{"term": e.get("term"), "organ_system": e.get("organSystem"), "stats": e.get("stats", [])} for e in events]
+
+
+def _parse_adverse_events(ae_module: dict) -> dict:
+    """Parse an adverseEventsModule into a normalized dict."""
+    return {
+        "serious_events": _parse_event_list(ae_module.get("seriousEvents", [])),
+        "other_events": _parse_event_list(ae_module.get("otherEvents", [])),
+        "frequency_threshold": ae_module.get("frequencyThreshold"),
+        "time_frame": ae_module.get("timeFrame"),
+    }
+
+
+def _parse_outcomes(outcomes: list[dict]) -> list[dict]:
+    """Extract measure, timeFrame, and description from outcome entries."""
+    return [{"measure": o.get("measure"), "timeFrame": o.get("timeFrame"), "description": o.get("description")} for o in outcomes]
+
+
 @mcp.tool()
 def get_clinical_trial_details(nct_id: str) -> dict:
     """Retrieve comprehensive clinical trial record from ClinicalTrials.gov.
@@ -33,64 +53,12 @@ def get_clinical_trial_details(nct_id: str) -> dict:
     outcomes_module = protocol.get("outcomesModule", {})
     results_section = data.get("resultsSection", {})
 
-    interventions = []
-    for intervention in arms_module.get("interventions", []):
-        interventions.append(
-            {
-                "type": intervention.get("type"),
-                "name": intervention.get("name"),
-                "description": intervention.get("description"),
-            }
-        )
+    interventions = [
+        {"type": i.get("type"), "name": i.get("name"), "description": i.get("description")} for i in arms_module.get("interventions", [])
+    ]
 
-    primary_outcomes = []
-    for outcome in outcomes_module.get("primaryOutcomes", []):
-        primary_outcomes.append(
-            {
-                "measure": outcome.get("measure"),
-                "timeFrame": outcome.get("timeFrame"),
-                "description": outcome.get("description"),
-            }
-        )
-
-    secondary_outcomes = []
-    for outcome in outcomes_module.get("secondaryOutcomes", []):
-        secondary_outcomes.append(
-            {
-                "measure": outcome.get("measure"),
-                "timeFrame": outcome.get("timeFrame"),
-                "description": outcome.get("description"),
-            }
-        )
-
-    # Extract adverse events if results are posted
-    adverse_events = {}
     ae_module = results_section.get("adverseEventsModule", {})
-    if ae_module:
-        serious_events = []
-        for event_group in ae_module.get("seriousEvents", []):
-            serious_events.append(
-                {
-                    "term": event_group.get("term"),
-                    "organ_system": event_group.get("organSystem"),
-                    "stats": event_group.get("stats", []),
-                }
-            )
-        other_events = []
-        for event_group in ae_module.get("otherEvents", []):
-            other_events.append(
-                {
-                    "term": event_group.get("term"),
-                    "organ_system": event_group.get("organSystem"),
-                    "stats": event_group.get("stats", []),
-                }
-            )
-        adverse_events = {
-            "serious_events": serious_events,
-            "other_events": other_events,
-            "frequency_threshold": ae_module.get("frequencyThreshold"),
-            "time_frame": ae_module.get("timeFrame"),
-        }
+    adverse_events = _parse_adverse_events(ae_module) if ae_module else {}
 
     return {
         "nct_id": nct_id,
@@ -105,12 +73,12 @@ def get_clinical_trial_details(nct_id: str) -> dict:
             "minimum_age": eligibility_module.get("minimumAge", ""),
             "maximum_age": eligibility_module.get("maximumAge", ""),
         },
-        "primary_outcomes": primary_outcomes,
-        "secondary_outcomes": secondary_outcomes,
+        "primary_outcomes": _parse_outcomes(outcomes_module.get("primaryOutcomes", [])),
+        "secondary_outcomes": _parse_outcomes(outcomes_module.get("secondaryOutcomes", [])),
         "results": bool(results_section),
         "adverse_events": adverse_events,
         "why_stopped": status_module.get("whyStopped"),
-        "enrollment": protocol.get("designModule", {}).get("enrollmentInfo", {}).get("count"),
+        "enrollment": design_module.get("enrollmentInfo", {}).get("count"),
         "start_date": status_module.get("startDateStruct", {}).get("date"),
         "completion_date": status_module.get("completionDateStruct", {}).get("date"),
     }
@@ -174,41 +142,15 @@ def get_trial_adverse_events(nct_id: str) -> dict:
     response.raise_for_status()
     data = response.json()
 
-    results_section = data.get("resultsSection", {})
-    ae_module = results_section.get("adverseEventsModule", {})
+    ae_module = data.get("resultsSection", {}).get("adverseEventsModule", {})
 
     if not ae_module:
         return {"nct_id": nct_id, "has_results": False, "adverse_events": {}}
 
-    serious_events = []
-    for event in ae_module.get("seriousEvents", []):
-        serious_events.append(
-            {
-                "term": event.get("term"),
-                "organ_system": event.get("organSystem"),
-                "stats": event.get("stats", []),
-            }
-        )
-
-    other_events = []
-    for event in ae_module.get("otherEvents", []):
-        other_events.append(
-            {
-                "term": event.get("term"),
-                "organ_system": event.get("organSystem"),
-                "stats": event.get("stats", []),
-            }
-        )
-
     return {
         "nct_id": nct_id,
         "has_results": True,
-        "adverse_events": {
-            "serious_events": serious_events,
-            "other_events": other_events,
-            "frequency_threshold": ae_module.get("frequencyThreshold"),
-            "time_frame": ae_module.get("timeFrame"),
-        },
+        "adverse_events": _parse_adverse_events(ae_module),
     }
 
 

@@ -28,6 +28,9 @@ CLAUDE.md
 # Lock file
 uv.lock
 
+# Audit logs
+audit_logs/
+
 # Misc
 *.pdf
 

@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 STATISTICAL_GENETICS_PROMPT = """
 You are the Statistical Genetics Agent in the Target Identification division.
 
@@ -18,6 +20,8 @@ YOUR EXPERTISE:
 YOUR TOOLS:
 You have access to MCP tools for querying GWAS, QTL, gnomAD, ClinVar, dbSNP,
 PharmGKB, and ENCODE E2G data. You also have bash/Python for custom analyses.
+Use Bash only for data computation — if an MCP tool returns an error, report it
+in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When given a gene target and disease, systematically evaluate germline genetic
@@ -38,11 +42,11 @@ CRITICAL PRINCIPLES:
   from somatic mechanisms (e.g., tumor overexpression for checkpoint targets).
 """
 
-MCP_SERVER_NAMES = ["human_genetics"]
+MCP_SERVER_NAMES = ["human_genetics", "diseases"]
 
 statistical_genetics_agent = AgentDefinition(
     description="Statistical Genetics specialist for GWAS, fine-mapping, L2G, QTL colocalization, and constraints",
     prompt=STATISTICAL_GENETICS_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

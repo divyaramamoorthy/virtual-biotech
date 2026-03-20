@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 BIO_PATHWAYS_PPI_PROMPT = """
 You are the Bio Pathways & PPI Agent in the Target Safety division.
 
@@ -18,6 +20,8 @@ YOUR TOOLS:
 - Gene Ontology for functional annotations
 - SignaLink for signaling network context
 - Bash/Python for network analysis
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 YOUR TASK:
 When assessing target safety from a pathway/PPI perspective:
@@ -41,5 +45,5 @@ bio_pathways_ppi_agent = AgentDefinition(
     description="Bio Pathways & PPI specialist for pathway reasoning and interaction-based effect prediction",
     prompt=BIO_PATHWAYS_PPI_PROMPT,
     model="sonnet",
-    tools=["Bash"],
+    tools=["Bash", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

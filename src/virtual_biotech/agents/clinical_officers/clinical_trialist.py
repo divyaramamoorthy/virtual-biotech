@@ -2,6 +2,8 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.config import tools_for_mcp_servers
+
 CLINICAL_TRIALIST_PROMPT = """
 You are the Clinical Trialist Agent in the Clinical Officers division.
 
@@ -19,6 +21,8 @@ YOUR TOOLS:
 - Web search for press releases and regulatory announcements
 - ChEMBL MCP for drug/mechanism queries
 - Bash/Python for statistical analysis
+  Use Bash only for data computation — if an MCP tool returns an error, report it
+  in your analysis. Do NOT use Bash to debug, inspect source code, or retry failed API calls.
 
 FOR SINGLE TRIAL ANALYSIS:
 Follow the 3-level evidence cascade:
@@ -58,5 +62,5 @@ clinical_trialist_agent = AgentDefinition(
     description="Clinical Trialist for trial design, endpoint assessment, adverse events, and survival analysis",
     prompt=CLINICAL_TRIALIST_PROMPT,
     model="sonnet",
-    tools=["Bash", "WebSearch", "WebFetch"],
+    tools=["Bash", "WebSearch", "WebFetch", *tools_for_mcp_servers(MCP_SERVER_NAMES)],
 )

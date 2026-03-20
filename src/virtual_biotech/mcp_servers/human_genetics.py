@@ -15,6 +15,20 @@ def _ot_graphql(query: str, variables: dict) -> dict:
     return response.json()
 
 
+def _resolve_ensembl_id(gene_symbol: str) -> str | None:
+    """Resolve a gene symbol to its Ensembl ID via Open Targets search."""
+    search_query = """
+    query SearchTarget($queryString: String!) {
+        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
+            hits { id }
+        }
+    }
+    """
+    result = _ot_graphql(search_query, {"queryString": gene_symbol})
+    hits = result.get("data", {}).get("search", {}).get("hits", [])
+    return hits[0]["id"] if hits else None
+
+
 @mcp.tool()
 def query_gwas_associations(gene_symbol: str, disease_id: str) -> dict:
     """Query GWAS catalog and Open Targets for variant-disease associations at a gene locus.
@@ -28,7 +42,7 @@ def query_gwas_associations(gene_symbol: str, disease_id: str) -> dict:
         and study metadata.
     """
     query = """
-    query GWASAssociations($ensemblId: String!, $efoId: String!) {
+    query GWASAssociations($efoId: String!) {
         disease(efoId: $efoId) {
             associatedTargets(page: {size: 50, index: 0}) {
                 rows {
@@ -40,17 +54,7 @@ def query_gwas_associations(gene_symbol: str, disease_id: str) -> dict:
         }
     }
     """
-    # First resolve gene symbol to Ensembl ID
-    search_query = """
-    query SearchTarget($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id name entity }
-        }
-    }
-    """
-    search_result = _ot_graphql(search_query, {"queryString": gene_symbol})
-    hits = search_result.get("data", {}).get("search", {}).get("hits", [])
-    ensembl_id = hits[0]["id"] if hits else None
+    ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "disease_id": disease_id, "error": "Gene not found", "associations": []}
@@ -81,17 +85,7 @@ def query_credible_sets(gene_symbol: str, disease_id: str) -> dict:
         Dictionary with variant IDs, posterior inclusion probabilities,
         and credible set size.
     """
-    # Resolve gene symbol to Ensembl ID
-    search_query = """
-    query SearchTarget($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
-    search_result = _ot_graphql(search_query, {"queryString": gene_symbol})
-    hits = search_result.get("data", {}).get("search", {}).get("hits", [])
-    ensembl_id = hits[0]["id"] if hits else None
+    ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "disease_id": disease_id, "error": "Gene not found"}
@@ -117,16 +111,15 @@ def query_credible_sets(gene_symbol: str, disease_id: str) -> dict:
     except Exception:
         rows = []
 
-    credible_sets = []
-    for row in rows:
-        credible_sets.append(
-            {
-                "variant_id": row.get("variantId"),
-                "study_id": row.get("studyId"),
-                "score": row.get("score"),
-                "resource_score": row.get("resourceScore"),
-            }
-        )
+    credible_sets = [
+        {
+            "variant_id": row.get("variantId"),
+            "study_id": row.get("studyId"),
+            "score": row.get("score"),
+            "resource_score": row.get("resourceScore"),
+        }
+        for row in rows
+    ]
 
     return {
         "gene_symbol": gene_symbol,
@@ -148,16 +141,7 @@ def query_l2g_scores(gene_symbol: str, disease_id: str) -> dict:
         Dictionary with L2G score, rank, and contributing features
         (eQTL, chromatin, distance).
     """
-    search_query = """
-    query SearchTarget($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
-    search_result = _ot_graphql(search_query, {"queryString": gene_symbol})
-    hits = search_result.get("data", {}).get("search", {}).get("hits", [])
-    ensembl_id = hits[0]["id"] if hits else None
+    ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "error": "Gene not found"}
@@ -219,17 +203,7 @@ def query_qtl_colocalization(gene_symbol: str, tissue: str) -> dict:
         Dictionary with H4 posterior probabilities, CLPP scores,
         and tissue specificity.
     """
-    # Resolve gene to Ensembl ID
-    search_query = """
-    query SearchTarget($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
-    search_result = _ot_graphql(search_query, {"queryString": gene_symbol})
-    hits = search_result.get("data", {}).get("search", {}).get("hits", [])
-    ensembl_id = hits[0]["id"] if hits else None
+    ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "tissue": tissue, "error": "Gene not found"}
@@ -242,15 +216,10 @@ def query_qtl_colocalization(gene_symbol: str, tissue: str) -> dict:
         response = httpx.get(gtex_url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
-        for entry in data.get("singleTissueEqtl", [])[:20]:
-            eqtl_data.append(
-                {
-                    "variant_id": entry.get("variantId"),
-                    "pvalue": entry.get("pValue"),
-                    "nes": entry.get("nes"),
-                    "tissue": entry.get("tissueSiteDetailId"),
-                }
-            )
+        eqtl_data = [
+            {"variant_id": e.get("variantId"), "pvalue": e.get("pValue"), "nes": e.get("nes"), "tissue": e.get("tissueSiteDetailId")}
+            for e in data.get("singleTissueEqtl", [])[:20]
+        ]
     except Exception:
         pass
 
@@ -271,8 +240,7 @@ def query_qtl_colocalization(gene_symbol: str, tissue: str) -> dict:
     try:
         result = _ot_graphql(qtl_query, {"ensemblId": ensembl_id})
         rows = result.get("data", {}).get("target", {}).get("evidences", {}).get("rows", [])
-        for row in rows:
-            expression_evidence.append({"study_id": row.get("studyId"), "score": row.get("score")})
+        expression_evidence = [{"study_id": row.get("studyId"), "score": row.get("score")} for row in rows]
     except Exception:
         pass
 
@@ -413,29 +381,19 @@ def query_enhancer_gene(gene_symbol: str, tissue: str) -> dict:
     except Exception:
         results = []
 
-    enhancer_links = []
-    for item in results:
-        enhancer_links.append(
-            {
-                "accession": item.get("accession", ""),
-                "description": item.get("description", ""),
-                "biosample": item.get("biosample_summary", ""),
-                "status": item.get("status", ""),
-            }
-        )
+    enhancer_links = [
+        {
+            "accession": item.get("accession", ""),
+            "description": item.get("description", ""),
+            "biosample": item.get("biosample_summary", ""),
+            "status": item.get("status", ""),
+        }
+        for item in results
+    ]
 
     # Also query Open Targets for regulatory variant evidence
-    search_query = """
-    query SearchTarget($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
     try:
-        search_result = _ot_graphql(search_query, {"queryString": gene_symbol})
-        hits = search_result.get("data", {}).get("search", {}).get("hits", [])
-        ensembl_id = hits[0]["id"] if hits else None
+        ensembl_id = _resolve_ensembl_id(gene_symbol)
     except Exception:
         ensembl_id = None
 

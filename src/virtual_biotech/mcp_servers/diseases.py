@@ -8,6 +8,29 @@ mcp = FastMCP("diseases")
 OT_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
 
 
+def _ot_graphql(query: str, variables: dict) -> dict:
+    """Execute an Open Targets GraphQL query."""
+    response = httpx.post(OT_GRAPHQL, json={"query": query, "variables": variables}, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+def _resolve_ensembl_id(gene_symbol: str) -> str | None:
+    """Resolve a gene symbol to its Ensembl ID via Open Targets search."""
+    query = """
+    query SearchTarget($queryString: String!) {
+        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
+            hits { id }
+        }
+    }
+    """
+    try:
+        hits = _ot_graphql(query, {"queryString": gene_symbol}).get("data", {}).get("search", {}).get("hits", [])
+        return hits[0]["id"] if hits else None
+    except Exception:
+        return None
+
+
 @mcp.tool()
 def get_disease_associations(gene_symbol: str) -> dict:
     """Get disease associations for a gene from Open Targets and OMIM.
@@ -19,26 +42,11 @@ def get_disease_associations(gene_symbol: str) -> dict:
         Dictionary with associated diseases, evidence scores,
         and data source breakdown.
     """
-    # Resolve gene to Ensembl ID
-    search_query = """
-    query SearchTarget($queryString: String!) {
-        search(queryString: $queryString, entityNames: ["target"], page: {size: 1, index: 0}) {
-            hits { id }
-        }
-    }
-    """
-    try:
-        response = httpx.post(OT_GRAPHQL, json={"query": search_query, "variables": {"queryString": gene_symbol}}, timeout=30)
-        response.raise_for_status()
-        hits = response.json().get("data", {}).get("search", {}).get("hits", [])
-        ensembl_id = hits[0]["id"] if hits else None
-    except Exception:
-        ensembl_id = None
+    ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
         return {"gene_symbol": gene_symbol, "error": "Gene not found"}
 
-    # Get associated diseases
     assoc_query = """
     query AssociatedDiseases($ensemblId: String!) {
         target(ensemblId: $ensemblId) {
@@ -55,25 +63,21 @@ def get_disease_associations(gene_symbol: str) -> dict:
     }
     """
     try:
-        response = httpx.post(OT_GRAPHQL, json={"query": assoc_query, "variables": {"ensemblId": ensembl_id}}, timeout=30)
-        response.raise_for_status()
-        data = response.json().get("data", {}).get("target", {})
+        data = _ot_graphql(assoc_query, {"ensemblId": ensembl_id}).get("data", {}).get("target", {})
         assoc_data = data.get("associatedDiseases", {})
     except Exception:
         assoc_data = {}
 
-    diseases = []
-    for row in assoc_data.get("rows", []):
-        disease = row.get("disease", {})
-        diseases.append(
-            {
-                "disease_id": disease.get("id"),
-                "disease_name": disease.get("name"),
-                "therapeutic_areas": [ta.get("name") for ta in disease.get("therapeuticAreas", [])],
-                "overall_score": row.get("score"),
-                "datatype_scores": {dt.get("id"): dt.get("score") for dt in row.get("datatypeScores", [])},
-            }
-        )
+    diseases = [
+        {
+            "disease_id": row.get("disease", {}).get("id"),
+            "disease_name": row.get("disease", {}).get("name"),
+            "therapeutic_areas": [ta.get("name") for ta in row.get("disease", {}).get("therapeuticAreas", [])],
+            "overall_score": row.get("score"),
+            "datatype_scores": {dt.get("id"): dt.get("score") for dt in row.get("datatypeScores", [])},
+        }
+        for row in assoc_data.get("rows", [])
+    ]
 
     return {
         "gene_symbol": gene_symbol,
@@ -98,19 +102,12 @@ def get_disease_ontology(disease_name: str) -> dict:
     search_query = """
     query SearchDisease($queryString: String!) {
         search(queryString: $queryString, entityNames: ["disease"], page: {size: 10, index: 0}) {
-            hits {
-                id
-                name
-                description
-                entity
-            }
+            hits { id name description entity }
         }
     }
     """
     try:
-        response = httpx.post(OT_GRAPHQL, json={"query": search_query, "variables": {"queryString": disease_name}}, timeout=30)
-        response.raise_for_status()
-        hits = response.json().get("data", {}).get("search", {}).get("hits", [])
+        hits = _ot_graphql(search_query, {"queryString": disease_name}).get("data", {}).get("search", {}).get("hits", [])
     except Exception:
         hits = []
 
@@ -119,7 +116,6 @@ def get_disease_ontology(disease_name: str) -> dict:
 
     disease_id = hits[0]["id"]
 
-    # Get detailed disease info
     detail_query = """
     query DiseaseDetail($efoId: String!) {
         disease(efoId: $efoId) {
@@ -134,9 +130,7 @@ def get_disease_ontology(disease_name: str) -> dict:
     }
     """
     try:
-        response = httpx.post(OT_GRAPHQL, json={"query": detail_query, "variables": {"efoId": disease_id}}, timeout=30)
-        response.raise_for_status()
-        disease_data = response.json().get("data", {}).get("disease", {})
+        disease_data = _ot_graphql(detail_query, {"efoId": disease_id}).get("data", {}).get("disease", {})
     except Exception:
         disease_data = {}
 
