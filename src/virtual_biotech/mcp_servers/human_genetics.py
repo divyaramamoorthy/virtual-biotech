@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("human-genetics")
 
 OPEN_TARGETS_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
@@ -57,7 +59,13 @@ def query_gwas_associations(gene_symbol: str, disease_id: str) -> dict:
     ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "disease_id": disease_id, "error": "Gene not found", "associations": []}
+        return {
+            "gene_symbol": gene_symbol,
+            "disease_id": disease_id,
+            "error": "Gene not found",
+            "associations": [],
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     result = _ot_graphql(query, {"ensemblId": ensembl_id, "efoId": disease_id})
     rows = result.get("data", {}).get("disease", {}).get("associatedTargets", {}).get("rows", [])
@@ -70,6 +78,13 @@ def query_gwas_associations(gene_symbol: str, disease_id: str) -> dict:
         "disease_id": disease_id,
         "overall_score": target_row["score"] if target_row else 0.0,
         "datatype_scores": target_row["datatypeScores"] if target_row else [],
+        "_sources": [
+            make_source(
+                "Open Targets Platform",
+                url=f"https://platform.opentargets.org/evidence/{ensembl_id}/{disease_id}",
+                identifiers={"ensembl_id": ensembl_id, "disease_id": disease_id},
+            ),
+        ],
     }
 
 
@@ -88,7 +103,12 @@ def query_credible_sets(gene_symbol: str, disease_id: str) -> dict:
     ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "disease_id": disease_id, "error": "Gene not found"}
+        return {
+            "gene_symbol": gene_symbol,
+            "disease_id": disease_id,
+            "error": "Gene not found",
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     # Query Open Targets for credible set evidence via the evidences endpoint
     credible_query = """
@@ -126,6 +146,13 @@ def query_credible_sets(gene_symbol: str, disease_id: str) -> dict:
         "ensembl_id": ensembl_id,
         "disease_id": disease_id,
         "credible_sets": credible_sets,
+        "_sources": [
+            make_source(
+                "Open Targets Platform",
+                url=f"https://platform.opentargets.org/evidence/{ensembl_id}/{disease_id}",
+                identifiers={"ensembl_id": ensembl_id, "disease_id": disease_id},
+            ),
+        ],
     }
 
 
@@ -144,7 +171,11 @@ def query_l2g_scores(gene_symbol: str, disease_id: str) -> dict:
     ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "error": "Gene not found"}
+        return {
+            "gene_symbol": gene_symbol,
+            "error": "Gene not found",
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     # Query Open Targets for genetic association evidence which includes L2G-derived scores
     l2g_query = """
@@ -188,6 +219,13 @@ def query_l2g_scores(gene_symbol: str, disease_id: str) -> dict:
         "ensembl_id": ensembl_id,
         "max_l2g_score": max_score,
         "l2g_entries": l2g_entries,
+        "_sources": [
+            make_source(
+                "Open Targets Platform",
+                url=f"https://platform.opentargets.org/evidence/{ensembl_id}/{disease_id}",
+                identifiers={"ensembl_id": ensembl_id, "disease_id": disease_id},
+            ),
+        ],
     }
 
 
@@ -206,7 +244,12 @@ def query_qtl_colocalization(gene_symbol: str, tissue: str) -> dict:
     ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "tissue": tissue, "error": "Gene not found"}
+        return {
+            "gene_symbol": gene_symbol,
+            "tissue": tissue,
+            "error": "Gene not found",
+            "_sources": [make_source("GTEx Portal", url=f"https://gtexportal.org/home/gene/{gene_symbol}", version="v8")],
+        }
 
     # Query GTEx eQTL data from the GTEx portal
     gtex_url = "https://gtexportal.org/api/v2/association/singleTissueEqtl"
@@ -250,6 +293,10 @@ def query_qtl_colocalization(gene_symbol: str, tissue: str) -> dict:
         "tissue": tissue,
         "eqtl_data": eqtl_data,
         "expression_evidence": expression_evidence,
+        "_sources": [
+            make_source("GTEx Portal", url=f"https://gtexportal.org/home/gene/{gene_symbol}", version="v8"),
+            make_source("Open Targets Platform", url=f"https://platform.opentargets.org/target/{ensembl_id}"),
+        ],
     }
 
 
@@ -325,6 +372,10 @@ def query_rare_variants(gene_symbol: str) -> dict:
             "missense_z": constraint.get("mis_z"),
         },
         "clinvar_pathogenic_count": clinvar_count,
+        "_sources": [
+            make_source("gnomAD", url=f"https://gnomad.broadinstitute.org/gene/{gene_symbol}?dataset=gnomad_r4"),
+            make_source("ClinVar", url=f"https://www.ncbi.nlm.nih.gov/clinvar/?term={gene_symbol}[gene]"),
+        ],
     }
 
 
@@ -349,6 +400,7 @@ def query_pharmacogenomics(gene_symbol: str) -> dict:
     return {
         "gene_symbol": gene_symbol,
         "pharmgkb_data": data,
+        "_sources": [make_source("PharmGKB", url=f"https://www.pharmgkb.org/gene/{gene_symbol}")],
     }
 
 
@@ -403,6 +455,7 @@ def query_enhancer_gene(gene_symbol: str, tissue: str) -> dict:
         "ensembl_id": ensembl_id,
         "enhancer_gene_links": enhancer_links,
         "regulatory_element_count": len(enhancer_links),
+        "_sources": [make_source("ENCODE", url=f"https://www.encodeproject.org/search/?searchTerm={gene_symbol}")],
     }
 
 

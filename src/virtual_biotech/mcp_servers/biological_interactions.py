@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("biological-interactions")
 
 
@@ -75,6 +77,10 @@ def query_protein_interactions(gene_symbol: str, confidence_threshold: float = 0
         "string_interactions": interactions,
         "string_interaction_count": len(interactions),
         "intact_interaction_count": intact_count,
+        "_sources": [
+            make_source("STRING", url=f"https://string-db.org/network/9606.{gene_symbol}"),
+            make_source("IntAct", url=f"https://www.ebi.ac.uk/intact/search?query={gene_symbol}"),
+        ],
     }
 
 
@@ -92,7 +98,7 @@ def query_pathway_membership(gene_symbol: str) -> dict:
     uniprot_id = _resolve_to_uniprot(gene_symbol)
 
     if not uniprot_id:
-        return {"gene_symbol": gene_symbol, "error": "UniProt ID not found", "pathways": []}
+        return {"gene_symbol": gene_symbol, "error": "UniProt ID not found", "pathways": [], "_sources": [make_source("Reactome", url="https://reactome.org")]}
 
     # Query Reactome
     reactome_url = f"https://reactome.org/ContentService/data/pathways/low/entity/UniProt:{uniprot_id}"
@@ -118,6 +124,7 @@ def query_pathway_membership(gene_symbol: str) -> dict:
         "uniprot_id": uniprot_id,
         "pathways": pathways,
         "pathway_count": len(pathways),
+        "_sources": [make_source("Reactome", url=f"https://reactome.org/content/detail/UniProt:{uniprot_id}")],
     }
 
 
@@ -150,6 +157,7 @@ def query_signaling_network(gene_symbol: str) -> dict:
         "gene_symbol": gene_symbol,
         "signaling_pathways": signaling_pathways,
         "note": "Signaling context derived from Reactome pathway hierarchy",
+        "_sources": [make_source("Reactome", url=f"https://reactome.org/content/query?q={gene_symbol}")],
     }
 
 

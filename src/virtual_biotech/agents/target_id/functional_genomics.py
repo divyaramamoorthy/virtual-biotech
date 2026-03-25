@@ -2,9 +2,11 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.agents import CITATION_INSTRUCTION
 from virtual_biotech.config import tools_for_mcp_servers
 
-FUNCTIONAL_GENOMICS_PROMPT = """
+FUNCTIONAL_GENOMICS_PROMPT = (
+    """
 You are the Functional Genomics Agent in the Target Identification division.
 
 YOUR EXPERTISE:
@@ -43,6 +45,8 @@ CRITICAL PRINCIPLES:
 - For Tahoe data, zero non-significant LFC values before computing hallmark scores
 - Report which genes in each hallmark set were significantly perturbed
 """
+    + CITATION_INSTRUCTION
+)
 
 MCP_SERVER_NAMES = ["functional_genomics"]
 

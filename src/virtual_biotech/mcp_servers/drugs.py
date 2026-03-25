@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("drugs")
 
 CHEMBL_BASE = "https://www.ebi.ac.uk/chembl/api/data"
@@ -62,6 +64,15 @@ def search_drugs_by_target(gene_symbol: str) -> dict:
         "target_chembl_ids": target_chembl_ids,
         "compounds": drugs,
         "compound_count": len(drugs),
+        "_sources": [
+            make_source(
+                "ChEMBL",
+                url=f"https://www.ebi.ac.uk/chembl/target_report_card/{tid}",
+                identifiers={"target_chembl_id": tid},
+            )
+            for tid in target_chembl_ids[:3]
+        ]
+        or [make_source("ChEMBL", url="https://www.ebi.ac.uk/chembl/")],
     }
 
 
@@ -86,7 +97,11 @@ def get_drug_mechanism(drug_name: str) -> dict:
         molecules = []
 
     if not molecules:
-        return {"drug_name": drug_name, "error": "Drug not found in ChEMBL"}
+        return {
+            "drug_name": drug_name,
+            "error": "Drug not found in ChEMBL",
+            "_sources": [make_source("ChEMBL", url="https://www.ebi.ac.uk/chembl/")],
+        }
 
     mol_chembl_id = molecules[0].get("molecule_chembl_id")
 
@@ -111,6 +126,13 @@ def get_drug_mechanism(drug_name: str) -> dict:
                 "target_name": m.get("target_name"),
             }
             for m in mechanisms
+        ],
+        "_sources": [
+            make_source(
+                "ChEMBL",
+                url=f"https://www.ebi.ac.uk/chembl/compound_report_card/{mol_chembl_id}",
+                identifiers={"molecule_chembl_id": mol_chembl_id},
+            ),
         ],
     }
 
@@ -144,6 +166,7 @@ def query_fda_adverse_events(drug_name: str, limit: int = 100) -> dict:
         "drug_name": drug_name,
         "adverse_events": [{"reaction": r.get("term", ""), "count": r.get("count", 0)} for r in results],
         "total_unique_reactions": len(results),
+        "_sources": [make_source("OpenFDA", url="https://open.fda.gov/apis/drug/event/")],
     }
 
 
@@ -172,7 +195,11 @@ def get_drug_label(drug_name: str) -> dict:
         results = []
 
     if not results:
-        return {"drug_name": drug_name, "error": "Drug label not found"}
+        return {
+            "drug_name": drug_name,
+            "error": "Drug label not found",
+            "_sources": [make_source("OpenFDA", url="https://open.fda.gov/apis/drug/label/")],
+        }
 
     label = results[0]
     return {
@@ -183,6 +210,9 @@ def get_drug_label(drug_name: str) -> dict:
         "adverse_reactions": label.get("adverse_reactions", []),
         "drug_interactions": label.get("drug_interactions", []),
         "indications_and_usage": label.get("indications_and_usage", []),
+        "_sources": [
+            make_source("OpenFDA", url=f"https://dailymed.nlm.nih.gov/dailymed/search.cfm?query={drug_name}"),
+        ],
     }
 
 
@@ -229,6 +259,13 @@ def search_chembl_compounds(target_id: str, activity_type: str = "IC50", max_res
         "activity_type": activity_type,
         "compounds": compounds,
         "compound_count": len(compounds),
+        "_sources": [
+            make_source(
+                "ChEMBL",
+                url=f"https://www.ebi.ac.uk/chembl/target_report_card/{target_id}",
+                identifiers={"target_chembl_id": target_id},
+            ),
+        ],
     }
 
 

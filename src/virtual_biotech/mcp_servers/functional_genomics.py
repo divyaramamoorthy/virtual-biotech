@@ -4,6 +4,7 @@ import httpx
 from fastmcp import FastMCP
 
 from virtual_biotech.analysis.hallmarks import HALLMARK_GENE_SETS, compute_all_hallmark_scores
+from virtual_biotech.mcp_servers._sources import make_source
 
 mcp = FastMCP("functional-genomics")
 
@@ -71,6 +72,10 @@ def query_crispr_essentiality(gene_symbol: str, cell_line: str | None = None) ->
         "gene_info": gene_data,
         "dependency_data": dep_data,
         "note": "DepMap dependency scores: negative = essential, values < -0.5 suggest dependency",
+        "_sources": [
+            make_source("DepMap", url=f"https://depmap.org/portal/gene/{gene_symbol}"),
+            make_source("Cell Model Passports", url="https://cellmodelpassports.sanger.ac.uk"),
+        ],
     }
 
 
@@ -94,6 +99,7 @@ def query_tahoe_perturbation(drug_name: str, cell_line: str) -> dict:
         "top_downregulated": [],
         "note": "Tahoe-100M data requires local pseudobulked data files. "
         "Use compute_hallmark_scores tool to derive pathway-level signatures.",
+        "_sources": [make_source("Tahoe-100M", url="https://www.rxrx.ai/tahoe")],
     }
 
 
@@ -126,6 +132,7 @@ def compute_hallmark_scores(drug_name: str, cell_line: str, lfc_dict: dict[str, 
             "cell_line": cell_line,
             "error": "No LFC data provided. First call query_tahoe_perturbation to get LFC values.",
             "hallmark_gene_sets": {name: config for name, config in HALLMARK_GENE_SETS.items()},
+            "_sources": [make_source("Tahoe-100M", url="https://www.rxrx.ai/tahoe")],
         }
 
     scores = compute_all_hallmark_scores(lfc_dict)
@@ -144,6 +151,7 @@ def compute_hallmark_scores(drug_name: str, cell_line: str, lfc_dict: dict[str, 
         "cell_line": cell_line,
         "hallmark_scores": scores,
         "gene_level_lfc": gene_details,
+        "_sources": [make_source("Tahoe-100M", url="https://www.rxrx.ai/tahoe")],
     }
 
 

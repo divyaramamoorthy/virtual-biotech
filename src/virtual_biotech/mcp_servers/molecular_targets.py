@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("molecular-targets")
 
 OT_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
@@ -67,6 +69,10 @@ def get_protein_atlas_summary(gene_symbol: str) -> dict:
     return {
         "gene_symbol": gene_symbol,
         "protein_atlas_data": data,
+        "_sources": [
+            make_source("Human Protein Atlas", url=f"https://www.proteinatlas.org/{gene_symbol}"),
+            make_source("Open Targets Platform", url="https://platform.opentargets.org"),
+        ],
     }
 
 
@@ -84,7 +90,11 @@ def get_tractability_assessment(gene_symbol: str) -> dict:
     ensembl_id = _ot_search_ensembl(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "error": "Target not found"}
+        return {
+            "gene_symbol": gene_symbol,
+            "error": "Target not found",
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     # Get tractability data
     tract_query = """
@@ -116,6 +126,11 @@ def get_tractability_assessment(gene_symbol: str) -> dict:
         "gene_symbol": gene_symbol,
         "ensembl_id": ensembl_id,
         "tractability_by_modality": by_modality,
+        "_sources": [
+            make_source(
+                "Open Targets Platform", url=f"https://platform.opentargets.org/target/{ensembl_id}", identifiers={"ensembl_id": ensembl_id}
+            )
+        ],
     }
 
 
@@ -160,6 +175,7 @@ def get_mouse_ko_phenotypes(gene_symbol: str) -> dict:
         "gene_symbol": gene_symbol,
         "phenotypes": phenotypes,
         "phenotype_count": len(phenotypes),
+        "_sources": [make_source("IMPC", url=f"https://www.mousephenotype.org/data/genes/{gene_symbol}")],
     }
 
 
@@ -176,7 +192,11 @@ def get_chemical_probes(gene_symbol: str) -> dict:
     ensembl_id = _ot_search_ensembl(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "error": "Target not found"}
+        return {
+            "gene_symbol": gene_symbol,
+            "error": "Target not found",
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     probe_query = """
     query TargetProbes($ensemblId: String!) {
@@ -206,6 +226,11 @@ def get_chemical_probes(gene_symbol: str) -> dict:
         "ensembl_id": ensembl_id,
         "chemical_probes": probes,
         "probe_count": len(probes),
+        "_sources": [
+            make_source(
+                "Open Targets Platform", url=f"https://platform.opentargets.org/target/{ensembl_id}", identifiers={"ensembl_id": ensembl_id}
+            )
+        ],
     }
 
 

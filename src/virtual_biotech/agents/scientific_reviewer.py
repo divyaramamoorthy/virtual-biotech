@@ -15,6 +15,9 @@ Evaluate scientist agent outputs on three criteria:
 REVIEW PROCESS:
 - For each agent's output, assess methodology and statistical rigor.
 - Flag any unsupported claims, missing controls, or unaddressed confounders.
+- Verify that data-derived claims (from MCP tool queries) cite specific database
+  sources with [N] inline references and a Data Sources section. Flag data claims
+  that lack source citations. Literature or general knowledge does not need citations.
 - Identify gaps that could be addressed by re-routing to relevant agents.
 - Classify issues as HIGH priority (must fix before synthesis) or MODERATE (should fix).
 

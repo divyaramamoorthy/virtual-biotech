@@ -2,9 +2,11 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.agents import CITATION_INSTRUCTION
 from virtual_biotech.config import tools_for_mcp_servers
 
-PHARMACOLOGIST_PROMPT = """
+PHARMACOLOGIST_PROMPT = (
+    """
 You are the Pharmacologist Agent in the Modality Selection division.
 
 YOUR EXPERTISE:
@@ -40,6 +42,8 @@ CRITICAL PRINCIPLES:
 - Flag if the target has been previously abandoned in development (and why)
 - Consider patent landscape implications for development timeline
 """
+    + CITATION_INSTRUCTION
+)
 
 MCP_SERVER_NAMES = ["drugs"]
 

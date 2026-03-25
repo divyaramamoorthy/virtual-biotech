@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("diseases")
 
 OT_GRAPHQL = "https://api.platform.opentargets.org/api/v4/graphql"
@@ -45,7 +47,11 @@ def get_disease_associations(gene_symbol: str) -> dict:
     ensembl_id = _resolve_ensembl_id(gene_symbol)
 
     if not ensembl_id:
-        return {"gene_symbol": gene_symbol, "error": "Gene not found"}
+        return {
+            "gene_symbol": gene_symbol,
+            "error": "Gene not found",
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     assoc_query = """
     query AssociatedDiseases($ensemblId: String!) {
@@ -84,6 +90,11 @@ def get_disease_associations(gene_symbol: str) -> dict:
         "ensembl_id": ensembl_id,
         "total_associated_diseases": assoc_data.get("count", 0),
         "diseases": diseases,
+        "_sources": [
+            make_source(
+                "Open Targets Platform", url=f"https://platform.opentargets.org/target/{ensembl_id}", identifiers={"ensembl_id": ensembl_id}
+            )
+        ],
     }
 
 
@@ -112,7 +123,11 @@ def get_disease_ontology(disease_name: str) -> dict:
         hits = []
 
     if not hits:
-        return {"disease_name": disease_name, "error": "Disease not found"}
+        return {
+            "disease_name": disease_name,
+            "error": "Disease not found",
+            "_sources": [make_source("Open Targets Platform", url="https://platform.opentargets.org")],
+        }
 
     disease_id = hits[0]["id"]
 
@@ -139,10 +154,17 @@ def get_disease_ontology(disease_name: str) -> dict:
         "disease_id": disease_data.get("id"),
         "official_name": disease_data.get("name"),
         "description": disease_data.get("description"),
-        "synonyms": disease_data.get("synonyms", {}).get("terms", []),
+        "synonyms": [term for syn in disease_data.get("synonyms", []) for term in syn.get("terms", [])],
         "parent_diseases": [{"id": p.get("id"), "name": p.get("name")} for p in disease_data.get("parents", [])],
         "therapeutic_areas": [ta.get("name") for ta in disease_data.get("therapeuticAreas", [])],
         "cross_references": disease_data.get("dbXRefs", []),
+        "_sources": [
+            make_source(
+                "Open Targets Platform",
+                url=f"https://platform.opentargets.org/disease/{disease_id}",
+                identifiers={"disease_id": disease_id},
+            )
+        ],
     }
 
 

@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("clinical-trials")
 
 BASE_URL = "https://clinicaltrials.gov/api/v2"
@@ -81,6 +83,7 @@ def get_clinical_trial_details(nct_id: str) -> dict:
         "enrollment": design_module.get("enrollmentInfo", {}).get("count"),
         "start_date": status_module.get("startDateStruct", {}).get("date"),
         "completion_date": status_module.get("completionDateStruct", {}).get("date"),
+        "_sources": [make_source("ClinicalTrials.gov", url=f"https://clinicaltrials.gov/study/{nct_id}")],
     }
 
 
@@ -116,14 +119,16 @@ def search_trials_by_target(gene_symbol: str, condition: str | None = None, phas
         design_module = protocol.get("designModule", {})
         conditions_module = protocol.get("conditionsModule", {})
 
+        nct = id_module.get("nctId", "")
         trials.append(
             {
-                "nct_id": id_module.get("nctId", ""),
+                "nct_id": nct,
                 "title": id_module.get("briefTitle", ""),
                 "status": status_module.get("overallStatus", ""),
                 "phase": design_module.get("phases", []),
                 "conditions": conditions_module.get("conditions", []),
                 "start_date": status_module.get("startDateStruct", {}).get("date"),
+                "_sources": [make_source("ClinicalTrials.gov", url=f"https://clinicaltrials.gov/study/{nct}")] if nct else [],
             }
         )
 
@@ -144,13 +149,16 @@ def get_trial_adverse_events(nct_id: str) -> dict:
 
     ae_module = data.get("resultsSection", {}).get("adverseEventsModule", {})
 
+    source = make_source("ClinicalTrials.gov", url=f"https://clinicaltrials.gov/study/{nct_id}")
+
     if not ae_module:
-        return {"nct_id": nct_id, "has_results": False, "adverse_events": {}}
+        return {"nct_id": nct_id, "has_results": False, "adverse_events": {}, "_sources": [source]}
 
     return {
         "nct_id": nct_id,
         "has_results": True,
         "adverse_events": _parse_adverse_events(ae_module),
+        "_sources": [source],
     }
 
 

@@ -2,9 +2,11 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.agents import CITATION_INSTRUCTION
 from virtual_biotech.config import tools_for_mcp_servers
 
-FDA_SAFETY_OFFICER_PROMPT = """
+FDA_SAFETY_OFFICER_PROMPT = (
+    """
 You are the FDA Safety Officer Agent in the Target Safety division.
 You also serve the Clinical Officers division for regulatory safety assessments.
 
@@ -43,6 +45,8 @@ CRITICAL PRINCIPLES:
 - Flag any black box warnings or REMS requirements for drugs in the same class
 - Always note the strength of evidence: animal vs. human, in vitro vs. in vivo
 """
+    + CITATION_INSTRUCTION
+)
 
 MCP_SERVER_NAMES = ["drugs", "molecular_targets"]
 

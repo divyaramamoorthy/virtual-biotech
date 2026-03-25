@@ -2,9 +2,11 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.agents import CITATION_INSTRUCTION
 from virtual_biotech.config import tools_for_mcp_servers
 
-STATISTICAL_GENETICS_PROMPT = """
+STATISTICAL_GENETICS_PROMPT = (
+    """
 You are the Statistical Genetics Agent in the Target Identification division.
 
 YOUR EXPERTISE:
@@ -41,6 +43,8 @@ CRITICAL PRINCIPLES:
 - Flag when genetic evidence is weak but therapeutic rationale may derive
   from somatic mechanisms (e.g., tumor overexpression for checkpoint targets).
 """
+    + CITATION_INSTRUCTION
+)
 
 MCP_SERVER_NAMES = ["human_genetics", "diseases"]
 

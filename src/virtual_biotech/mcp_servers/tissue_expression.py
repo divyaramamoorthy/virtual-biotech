@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("tissue-expression")
 
 GTEX_BASE = "https://gtexportal.org/api/v2"
@@ -75,6 +77,7 @@ def query_tissue_expression(gene_symbol: str) -> dict:
         "max_tpm": max_expr,
         "mean_tpm": mean_expr,
         "expressing_tissues_above_1tpm": expressing_tissues,
+        "_sources": [make_source("GTEx Portal", url=f"https://gtexportal.org/home/gene/{gene_symbol}", version="v8")],
     }
 
 

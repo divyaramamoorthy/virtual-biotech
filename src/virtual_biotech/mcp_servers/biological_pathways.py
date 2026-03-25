@@ -3,6 +3,8 @@
 import httpx
 from fastmcp import FastMCP
 
+from virtual_biotech.mcp_servers._sources import make_source
+
 mcp = FastMCP("biological-pathways")
 
 _GO_ASPECTS = {"biological_process", "molecular_function", "cellular_component"}
@@ -34,7 +36,7 @@ def get_reactome_pathways(gene_symbol: str) -> dict:
     uniprot_id = _resolve_to_uniprot(gene_symbol)
 
     if not uniprot_id:
-        return {"gene_symbol": gene_symbol, "error": "UniProt ID not found"}
+        return {"gene_symbol": gene_symbol, "error": "UniProt ID not found", "_sources": [make_source("Reactome", url="https://reactome.org")]}
 
     # Get pathways
     reactome_url = f"https://reactome.org/ContentService/data/pathways/low/entity/UniProt:{uniprot_id}"
@@ -66,6 +68,7 @@ def get_reactome_pathways(gene_symbol: str) -> dict:
         "pathways": pathway_details,
         "top_level_categories": list(top_level),
         "total_pathways": len(pathway_details),
+        "_sources": [make_source("Reactome", url=f"https://reactome.org/content/detail/UniProt:{uniprot_id}")],
     }
 
 
@@ -117,6 +120,7 @@ def get_gene_ontology(gene_symbol: str) -> dict:
         "gene_symbol": gene_symbol,
         "go_annotations": go_terms,
         "total_annotations": sum(len(v) for v in go_terms.values()),
+        "_sources": [make_source("QuickGO", url=f"https://www.ebi.ac.uk/QuickGO/annotations?geneProductId={gene_symbol}&taxonId=9606")],
     }
 
 
@@ -142,7 +146,7 @@ def get_pathway_enrichment(gene_list: list[str]) -> dict:
         response.raise_for_status()
         data = response.json()
     except Exception as e:
-        return {"gene_list": gene_list, "error": str(e)}
+        return {"gene_list": gene_list, "error": str(e), "_sources": [make_source("Reactome", url="https://reactome.org/PathwayBrowser/#/DTAB=AN")]}
 
     pathways = [
         {
@@ -160,6 +164,7 @@ def get_pathway_enrichment(gene_list: list[str]) -> dict:
         "gene_list": gene_list,
         "enriched_pathways": pathways,
         "total_enriched": len(data.get("pathways", [])),
+        "_sources": [make_source("Reactome", url="https://reactome.org/PathwayBrowser/#/DTAB=AN")],
     }
 
 

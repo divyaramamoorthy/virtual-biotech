@@ -2,9 +2,11 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.agents import CITATION_INSTRUCTION
 from virtual_biotech.config import tools_for_mcp_servers
 
-BIO_PATHWAYS_PPI_PROMPT = """
+BIO_PATHWAYS_PPI_PROMPT = (
+    """
 You are the Bio Pathways & PPI Agent in the Target Safety division.
 
 YOUR EXPERTISE:
@@ -38,6 +40,8 @@ CRITICAL PRINCIPLES:
 - Assess whether interaction partners include other drug targets (polypharmacology risk)
 - Note if the target is in a pathway with known toxicity liabilities
 """
+    + CITATION_INSTRUCTION
+)
 
 MCP_SERVER_NAMES = ["biological_interactions", "biological_pathways"]
 

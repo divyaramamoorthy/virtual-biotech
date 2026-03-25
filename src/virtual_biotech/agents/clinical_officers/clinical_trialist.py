@@ -2,9 +2,11 @@
 
 from claude_agent_sdk import AgentDefinition
 
+from virtual_biotech.agents import CITATION_INSTRUCTION
 from virtual_biotech.config import tools_for_mcp_servers
 
-CLINICAL_TRIALIST_PROMPT = """
+CLINICAL_TRIALIST_PROMPT = (
+    """
 You are the Clinical Trialist Agent in the Clinical Officers division.
 
 YOUR EXPERTISE:
@@ -55,6 +57,8 @@ FOR STATISTICAL ANALYSIS OF FEATURES VS OUTCOMES:
   disease area (random) for confounders
 - Benjamini-Hochberg correction for multiple testing (FDR 5%)
 """
+    + CITATION_INSTRUCTION
+)
 
 MCP_SERVER_NAMES = ["clinical_trials", "drugs"]
 
