@@ -70,7 +70,7 @@ def _log(icon: str, color: str, text: str) -> None:
 def _log_trace(label: str, body: str) -> None:
     """Print a multi-line trace block to stderr (only when tracing is on)."""
     ts = time.strftime("%H:%M:%S")
-    header = f"{_DIM}{ts}{_RESET} {_MAGENTA}🔍{_RESET} {_BOLD}{label}{_RESET}"
+    header = f"{_DIM}{ts}{_RESET} {_MAGENTA}[TRACE]{_RESET} {_BOLD}{label}{_RESET}"
     separator = f"{_MAGENTA}{'─' * 72}{_RESET}"
     print(f"{header}\n{separator}\n{body}\n{separator}", file=sys.stderr, flush=True)
 
@@ -150,7 +150,7 @@ class AuditTracker:
         # so the UserMessage handler can retroactively fill in the output.
         self._pending_output: dict[str, _TaskRecord] = {}  # tool_use_id → record
 
-        _log("📁", _CYAN, f"Audit logs: {self.run_dir}")
+        _log(">>", _CYAN, f"Audit logs: {self.run_dir}")
 
     def handle_message(self, message: object) -> None:
         """Process an SDK message for audit tracking, then log it."""
@@ -163,7 +163,7 @@ class AuditTracker:
                     started_wall=time.strftime("%H:%M:%S"),
                 )
                 self._active[message.task_id] = rec
-                _log("▶", _CYAN, f"Task started: {message.description} [{message.task_id[:8]}]")
+                _log(">>", _CYAN, f"Task started: {message.description} [{message.task_id[:8]}]")
 
             case TaskProgressMessage():
                 elapsed = ""
@@ -172,9 +172,9 @@ class AuditTracker:
                     secs = time.monotonic() - rec.started_at
                     elapsed = f" [{secs:.0f}s]"
                     if secs > AGENT_TIMEOUT_WARNING_SECS:
-                        _log("⏰", _RED, f"SLOW AGENT: {message.description} running for {secs:.0f}s [{message.task_id[:8]}]")
+                        _log("!!", _RED, f"SLOW AGENT: {message.description} running for {secs:.0f}s [{message.task_id[:8]}]")
                 tool_info = f" (last tool: {message.last_tool_name})" if message.last_tool_name else ""
-                _log("⋯", _DIM, f"Working: {message.description}{tool_info}{elapsed}")
+                _log("..", _DIM, f"Working: {message.description}{tool_info}{elapsed}")
 
             case TaskNotificationMessage():
                 rec = self._active.pop(message.task_id, None)
@@ -187,7 +187,7 @@ class AuditTracker:
                 elif message.usage and message.usage.get("duration_ms"):
                     duration_secs = message.usage["duration_ms"] / 1000
 
-                icon, color = ("✓", _GREEN) if message.status == "completed" else ("✗", _RED)
+                icon, color = ("OK", _GREEN) if message.status == "completed" else ("X", _RED)
                 _log(icon, color, f"Task {message.status}: {message.summary} ({duration_secs:.1f}s)")
 
                 # Try output_file (usually empty for sub-agents)
@@ -222,10 +222,7 @@ class AuditTracker:
                 # SDK delivers sub-agent results as UserMessage with tool_use_result
                 # after TaskNotificationMessage. Extract text and update the report.
                 content_blocks = message.tool_use_result.get("content", [])
-                texts = [
-                    b["text"] for b in content_blocks
-                    if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()
-                ]
+                texts = [b["text"] for b in content_blocks if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip()]
                 if texts:
                     # Find the matching pending record via ToolResultBlock in message.content
                     tool_use_id: str | None = None
@@ -245,7 +242,7 @@ class AuditTracker:
             case AssistantMessage():
                 for block in message.content:
                     if isinstance(block, ToolUseBlock):
-                        _log("⚙", _YELLOW, f"Tool call: {block.name}")
+                        _log("->", _YELLOW, f"Tool call: {block.name}")
                         if _trace:
                             _log_trace(f"Tool input: {block.name}", json.dumps(block.input, indent=2))
                     elif isinstance(block, ToolResultBlock):
@@ -255,12 +252,12 @@ class AuditTracker:
                             _log_trace(f"Tool result{error_tag}", body[:2000])
                     elif isinstance(block, TextBlock) and block.text.strip():
                         preview = block.text.strip().replace("\n", " ")[:120]
-                        _log("💬", _DIM, preview)
+                        _log("--", _DIM, preview)
 
             case ResultMessage():
                 duration_s = message.duration_ms / 1000
                 cost = f" (${message.total_cost_usd:.2f})" if message.total_cost_usd else ""
-                _log("■", _BOLD, f"Done in {duration_s:.1f}s, {message.num_turns} turns{cost}")
+                _log("==", _BOLD, f"Done in {duration_s:.1f}s, {message.num_turns} turns{cost}")
 
     def _write_agent_report(self, rec: _TaskRecord) -> None:
         """Write a single agent's report to the audit directory."""
@@ -283,7 +280,7 @@ class AuditTracker:
         ]
 
         path.write_text("\n".join(lines))
-        _log("📝", _DIM, f"Audit report: {path}")
+        _log(">>", _DIM, f"Audit report: {path}")
 
     def write_summary(self) -> None:
         """Write a summary of all agents to the audit directory."""
@@ -312,7 +309,7 @@ class AuditTracker:
                 lines.append(f"- **{rec.description}** [{task_id[:8]}] — running for {elapsed:.0f}s")
 
         path.write_text("\n".join(lines))
-        _log("📊", _CYAN, f"Run summary: {path}")
+        _log(">>", _CYAN, f"Run summary: {path}")
 
 
 async def _run_chief_of_staff(user_query: str, tracker: AuditTracker) -> str:
@@ -322,7 +319,7 @@ async def _run_chief_of_staff(user_query: str, tracker: AuditTracker) -> str:
     """
     from virtual_biotech.agents.chief_of_staff import CHIEF_OF_STAFF_PROMPT
 
-    _log("▶", _CYAN, "Running Chief of Staff briefing")
+    _log(">>", _CYAN, "Running Chief of Staff briefing")
 
     options = ClaudeAgentOptions(
         system_prompt=CHIEF_OF_STAFF_PROMPT,
@@ -342,7 +339,7 @@ async def _run_chief_of_staff(user_query: str, tracker: AuditTracker) -> str:
             if message.subtype == "success":
                 briefing = message.result or ""
             else:
-                _log("✗", _RED, f"Chief of Staff failed: subtype={message.subtype} stop_reason={message.stop_reason}")
+                _log("X", _RED, f"Chief of Staff failed: subtype={message.subtype} stop_reason={message.stop_reason}")
 
     # Write audit report manually — top-level query() emits ResultMessage, not TaskNotificationMessage
     rec = _TaskRecord(
@@ -369,7 +366,7 @@ async def _run_cso_clarification(user_query: str, tracker: AuditTracker) -> str:
 
     Returns the clarification questions text.
     """
-    _log("▶", _CYAN, "CSO generating clarification questions")
+    _log(">>", _CYAN, "CSO generating clarification questions")
 
     prompt = (
         f"A user has submitted the following research query:\n\n"
@@ -406,7 +403,7 @@ async def _run_cso_clarification(user_query: str, tracker: AuditTracker) -> str:
             if message.subtype == "success":
                 questions = message.result or ""
             else:
-                _log("✗", _RED, f"CSO clarification failed: subtype={message.subtype} stop_reason={message.stop_reason}")
+                _log("X", _RED, f"CSO clarification failed: subtype={message.subtype} stop_reason={message.stop_reason}")
 
     return questions
 
@@ -454,18 +451,16 @@ async def run_virtual_biotech(user_query: str) -> str:
     # ── Phase 1: Chief of Staff briefing + CSO clarification questions (parallel) ──
     # Both launch concurrently. Clarification finishes fast (~10s, 1 turn);
     # the user answers questions while the briefing continues in the background.
-    _log("▶", _CYAN, "Phase 1: Intelligence briefing + intent clarification (parallel)")
+    _log(">>", _CYAN, "Phase 1: Intelligence briefing + intent clarification (parallel)")
 
-    briefing_task = asyncio.create_task(
-        asyncio.wait_for(_run_chief_of_staff(user_query, tracker), timeout=120)
-    )
+    briefing_task = asyncio.create_task(asyncio.wait_for(_run_chief_of_staff(user_query, tracker), timeout=120))
     clarification_task = asyncio.create_task(_run_cso_clarification(user_query, tracker))
 
     # Wait for clarification questions first (fast) — don't block on briefing
     try:
         questions = await clarification_task
     except Exception as exc:
-        _log("⏰", _RED, f"CSO clarification failed — proceeding without it: {type(exc).__name__}: {exc}")
+        _log("!!", _RED, f"CSO clarification failed — proceeding without it: {type(exc).__name__}: {exc}")
         questions = ""
 
     # ── Phase 2: Collect user clarification while briefing runs in background ──
@@ -473,19 +468,19 @@ async def run_virtual_biotech(user_query: str) -> str:
     if questions:
         clarified_intent = _collect_user_clarification(questions)
         if clarified_intent:
-            _log("✓", _GREEN, "User clarification received")
+            _log("OK", _GREEN, "User clarification received")
         else:
-            _log("⋯", _DIM, "No clarification provided — CSO will proceed with original query")
+            _log("..", _DIM, "No clarification provided — CSO will proceed with original query")
 
     # Now wait for the briefing to finish (may already be done while user was typing)
     try:
         briefing = await briefing_task
     except Exception as exc:
-        _log("⏰", _RED, f"Chief of Staff briefing failed — proceeding without it: {type(exc).__name__}: {exc}")
+        _log("!!", _RED, f"Chief of Staff briefing failed — proceeding without it: {type(exc).__name__}: {exc}")
         briefing = "Chief of Staff briefing unavailable. Proceed with your own assessment."
 
     # ── Phase 3: CSO orchestration with full context ──
-    _log("▶", _CYAN, "Phase 3: CSO task decomposition and agent routing")
+    _log(">>", _CYAN, "Phase 3: CSO task decomposition and agent routing")
 
     cso_sub_agents = {k: v for k, v in CSO_SUB_AGENTS.items() if k != "chief_of_staff"}
 
@@ -526,6 +521,8 @@ async def run_virtual_biotech(user_query: str) -> str:
     result_text = ""
     cso_text_blocks: list[str] = []
     async for message in query(prompt=cso_prompt, options=options):
+        if _trace:
+            _log_trace("SDK message", f"{type(message).__name__}: {str(message)[:500]}")
         tracker.handle_message(message)
         if isinstance(message, AssistantMessage) and message.parent_tool_use_id is None:
             # Capture top-level CSO text blocks (not sub-agent messages)
@@ -596,17 +593,15 @@ async def run_interactive_session() -> None:
 
             if first_turn:
                 # ── Phase 1: briefing + clarification (parallel) ──
-                _log("▶", _CYAN, "Phase 1: Intelligence briefing + intent clarification (parallel)")
+                _log(">>", _CYAN, "Phase 1: Intelligence briefing + intent clarification (parallel)")
 
-                briefing_task = asyncio.create_task(
-                    asyncio.wait_for(_run_chief_of_staff(user_input, tracker), timeout=120)
-                )
+                briefing_task = asyncio.create_task(asyncio.wait_for(_run_chief_of_staff(user_input, tracker), timeout=120))
                 clarification_task = asyncio.create_task(_run_cso_clarification(user_input, tracker))
 
                 try:
                     questions: str = await clarification_task
                 except Exception as exc:
-                    _log("⏰", _RED, f"CSO clarification failed: {type(exc).__name__}: {exc}")
+                    _log("!!", _RED, f"CSO clarification failed: {type(exc).__name__}: {exc}")
                     questions = ""
 
                 # ── Phase 2: collect user clarification while briefing continues ──
@@ -614,19 +609,19 @@ async def run_interactive_session() -> None:
                 if questions:
                     clarified_intent = _collect_user_clarification(questions)
                     if clarified_intent:
-                        _log("✓", _GREEN, "User clarification received")
+                        _log("OK", _GREEN, "User clarification received")
                     else:
-                        _log("⋯", _DIM, "No clarification provided — CSO will proceed with original query")
+                        _log("..", _DIM, "No clarification provided — CSO will proceed with original query")
 
                 # Wait for briefing to finish (may already be done while user was typing)
                 try:
                     briefing: str = await briefing_task
                 except Exception as exc:
-                    _log("⏰", _RED, f"Chief of Staff briefing failed: {type(exc).__name__}: {exc}")
+                    _log("!!", _RED, f"Chief of Staff briefing failed: {type(exc).__name__}: {exc}")
                     briefing = "Chief of Staff briefing unavailable. Proceed with your own assessment."
 
                 # ── Phase 3: send enriched prompt to CSO ──
-                _log("▶", _CYAN, "Phase 3: CSO task decomposition and agent routing")
+                _log(">>", _CYAN, "Phase 3: CSO task decomposition and agent routing")
 
                 context_parts = [user_input, ""]
                 context_parts.append("--- CHIEF OF STAFF INTELLIGENCE BRIEFING ---")
@@ -765,7 +760,7 @@ def main() -> None:
     args = [a for a in sys.argv[1:] if a != "--trace"]
     if "--trace" in sys.argv:
         _trace = True
-        _log("🔍", _MAGENTA, "Tracing enabled — agent outputs will be displayed")
+        _log(">>", _MAGENTA, "Tracing enabled — agent outputs will be displayed")
 
     if args:
         user_query = " ".join(args)

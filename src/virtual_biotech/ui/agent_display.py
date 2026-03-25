@@ -24,11 +24,11 @@ AGENT_DISPLAY: dict[str, tuple[str, str]] = {
 }
 
 DIVISION_ICONS: dict[str, str] = {
-    "Office of the CSO": "🏛️",
-    "Target Identification": "🎯",
-    "Target Safety": "🛡️",
-    "Modality Selection": "💊",
-    "Clinical Officers": "🏥",
+    "Office of the CSO": "",
+    "Target Identification": "",
+    "Target Safety": "",
+    "Modality Selection": "",
+    "Clinical Officers": "",
 }
 
 # Reverse lookups for agent key resolution
@@ -63,4 +63,48 @@ def division_for(agent_key: str) -> str:
 
 def division_icon(division: str) -> str:
     """Return the emoji icon for a division."""
-    return DIVISION_ICONS.get(division, "🔬")
+    return DIVISION_ICONS.get(division, "")
+
+
+def _mcp_server_display_name(server_name: str) -> str:
+    """Convert a snake_case MCP server name to a friendly display name."""
+    return server_name.replace("_", " ").title()
+
+
+def division_mcp_map() -> dict[str, dict[str, list[str]]]:
+    """Build a mapping of division -> agent display name -> MCP server names.
+
+    Returns:
+        {"Target Identification": {"Statistical Genetics": ["human_genetics", "diseases"], ...}, ...}
+    """
+    import importlib
+
+    result: dict[str, dict[str, list[str]]] = {}
+    for agent_key, (friendly_name, division) in AGENT_DISPLAY.items():
+        # Resolve module path for this agent
+        module_path = _AGENT_MODULE_PATHS.get(agent_key)
+        if module_path is None:
+            continue
+        try:
+            mod = importlib.import_module(module_path)
+            server_names: list[str] = getattr(mod, "MCP_SERVER_NAMES", [])
+        except Exception:
+            server_names = []
+        if not server_names:
+            continue
+        result.setdefault(division, {})[friendly_name] = server_names
+    return result
+
+
+# Agent key -> module path (for dynamic MCP_SERVER_NAMES import)
+_AGENT_MODULE_PATHS: dict[str, str] = {
+    "statistical_genetics": "virtual_biotech.agents.target_id.statistical_genetics",
+    "functional_genomics": "virtual_biotech.agents.target_id.functional_genomics",
+    "single_cell_atlas": "virtual_biotech.agents.target_id.single_cell_atlas",
+    "bio_pathways_ppi": "virtual_biotech.agents.target_safety.bio_pathways_ppi",
+    "safety_single_cell": "virtual_biotech.agents.target_safety.single_cell_atlas",
+    "fda_safety_officer": "virtual_biotech.agents.target_safety.fda_safety_officer",
+    "target_biologist": "virtual_biotech.agents.modality_selection.target_biologist",
+    "pharmacologist": "virtual_biotech.agents.modality_selection.pharmacologist",
+    "clinical_trialist": "virtual_biotech.agents.clinical_officers.clinical_trialist",
+}

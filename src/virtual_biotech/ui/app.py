@@ -36,6 +36,7 @@ from virtual_biotech.config import (
 )
 from virtual_biotech.orchestrator import AuditTracker, _TaskRecord
 from virtual_biotech.ui.message_handler import StreamlitMessageHandler
+from virtual_biotech.ui.pages import mcp_overview
 
 # ---------------------------------------------------------------------------
 # SDK environment
@@ -49,7 +50,7 @@ _SDK_ENV = {
     "ANTHROPIC_BASE_URL": ANTHROPIC_BASE_URL,
 }
 
-_STATUS_ICONS = {"running": "🔄", "completed": "✅", "failed": "❌", "stopped": "⏹️"}
+_STATUS_ICONS = {"running": "[...]", "completed": "[OK]", "failed": "[FAIL]", "stopped": "[STOP]"}
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +200,7 @@ async def _run_phase1(user_query: str, reports_container: DeltaGenerator) -> tup
 
     # Save CoS briefing as a report so it's visible immediately
     if briefing:
-        on_report("Chief of Staff Briefing", "🏛️", briefing, [])
+        on_report("Chief of Staff Briefing", "", briefing, [])
 
     return briefing, questions
 
@@ -289,7 +290,7 @@ async def _run_followup(user_query: str, previous_synthesis: str, agent_reports:
     ]
 
     for report in agent_reports:
-        context_parts.append(f"--- {report['icon']} {report['name']} REPORT ---")
+        context_parts.append(f"--- {report['name']} REPORT ---")
         context_parts.append(report["output"])
         context_parts.append(f"--- END {report['name']} REPORT ---")
         context_parts.append("")
@@ -351,7 +352,7 @@ def _build_activity_markdown(handler: StreamlitMessageHandler) -> str:
     for div_header, div_tasks in divisions.items():
         group_lines = [f"**{div_header}**"]
         for task in div_tasks:
-            icon = _STATUS_ICONS.get(task.status, "🔄")
+            icon = _STATUS_ICONS.get(task.status, "[...]")
             elapsed = f"({task.elapsed:.0f}s)"
             if task.status == "running":
                 tool_info = f" — running: `{task.last_tool}`" if task.last_tool else ""
@@ -388,7 +389,7 @@ def _parse_questions(questions_text: str) -> list[str]:
 
 def _render_sidebar() -> None:
     with st.sidebar:
-        st.markdown("## 🧬 Virtual Biotech")
+        st.markdown("## Virtual Biotech")
         st.caption("Multi-agent AI drug discovery platform")
         st.divider()
 
@@ -401,7 +402,7 @@ def _render_sidebar() -> None:
             st.info("Reports will be available after analysis completes.")
         elif reports:
             for i, report in enumerate(reports):
-                label = f"{report['icon']} {report['name']}"
+                label = report["name"]
                 is_selected = st.session_state.selected_report == i
                 btn_type = "primary" if is_selected else "secondary"
                 if st.button(label, key=f"report_{i}", use_container_width=True, type=btn_type):
@@ -414,11 +415,9 @@ def _render_sidebar() -> None:
         st.divider()
         st.markdown("### Run Stats")
         handler = st.session_state.get("handler")
-        if handler and (handler.tasks or handler.total_cost or handler.duration_s):
+        if handler and handler.tasks:
             col1, col2 = st.columns(2)
             col1.metric("Agents", len(handler.tasks))
-            col2.metric("Cost", f"${handler.total_cost:.2f}" if handler.total_cost else "—")
-            col1.metric("Duration", f"{handler.duration_s:.0f}s" if handler.duration_s else "—")
             col2.metric("Turns", handler.total_turns or "—")
 
             failed = [t for t in handler.tasks.values() if t.status == "failed"]
@@ -429,7 +428,7 @@ def _render_sidebar() -> None:
 
         # Clear session at the very bottom with confirmation
         st.divider()
-        with st.popover("🗑️ Clear Session", use_container_width=True):
+        with st.popover("Clear Session", use_container_width=True):
             st.warning("This will clear all results and reports.")
             if st.button("Confirm Clear", type="primary", key="confirm_clear"):
                 for key in list(st.session_state.keys()):
@@ -458,7 +457,7 @@ def _render_chat() -> None:
             st.error("An error occurred during analysis.")
             for err in st.session_state.errors:
                 st.warning(f"**{err['phase']}:** {err['detail']}")
-            if st.button("🔄 Retry", type="primary"):
+            if st.button("Retry", type="primary"):
                 st.session_state.errors.clear()
                 st.session_state.phase = Phase.PHASE1
                 st.rerun()
@@ -469,7 +468,7 @@ def _render_chat() -> None:
         with st.chat_message("assistant"):
             # Show briefing context in a collapsible expander
             if st.session_state.briefing:
-                with st.expander("📋 Intelligence Briefing Context", expanded=False):
+                with st.expander("Intelligence Briefing Context", expanded=False):
                     st.markdown(st.session_state.briefing)
 
             st.markdown(f"**The CSO has some questions before proceeding:**\n\n{st.session_state.questions}")
@@ -497,7 +496,7 @@ def _render_chat() -> None:
 
         # Re-render existing reports from Phase 1
         for report in st.session_state.agent_reports:
-            with reports_container.expander(f"{report['icon']} **{report['name']}** Report", expanded=False):
+            with reports_container.expander(f"**{report['name']}** Report", expanded=False):
                 st.markdown(report["output"])
 
         # Don't wire up on_report for threaded execution — we emit reports from the main thread
@@ -506,7 +505,7 @@ def _render_chat() -> None:
 
         with st.chat_message("assistant"):
             chat_container = st.empty()
-            with st.status("🧬 CSO is analyzing and routing to specialist agents...", expanded=True) as status:
+            with st.status("CSO is analyzing and routing to specialist agents...", expanded=True) as status:
                 activity_container = st.empty()
 
                 # Run Phase 3 in a background thread to enable live polling
@@ -580,21 +579,28 @@ def _render_chat() -> None:
 
                 if error_holder:
                     st.session_state.errors.append({"phase": "phase3", "detail": str(error_holder[0])})
-                    status.update(label="❌ CSO analysis failed", state="error")
+                    status.update(label="CSO analysis failed", state="error")
                     result = ""
                 else:
                     result = result_holder[0] if result_holder else ""
-                    cost = f" — ${handler.total_cost:.2f}" if handler.total_cost else ""
-                    status.update(label=f"✅ CSO completed in {handler.duration_s:.1f}s{cost}", state="complete")
+                    status.update(label="CSO analysis complete", state="complete")
 
             # Show warnings for failed agents
             failed_tasks = [t for t in handler.tasks.values() if t.status == "failed"]
             if failed_tasks:
                 failed_names = ", ".join(t.display_name for t in failed_tasks)
-                st.warning(f"⚠️ {len(failed_tasks)} agent(s) failed: {failed_names}")
+                st.warning(f"{len(failed_tasks)} agent(s) failed: {failed_names}")
 
             synthesis = handler.get_cso_synthesis() or result
-            chat_container.markdown(synthesis)
+            chat_container.markdown("Analysis complete — see the **Final Report** in the sidebar.")
+
+            # Add synthesis as the first report entry so it's prominent in the sidebar
+            st.session_state.agent_reports.insert(
+                0, {"name": "Final Report", "icon": "", "output": synthesis, "log": []}
+            )
+            # Auto-open the final report panel
+            st.session_state.selected_report = 0
+            st.session_state.report_panel_open = True
 
         st.session_state.messages.append({"role": "assistant", "content": synthesis})
         st.session_state.phase = Phase.DONE
@@ -614,7 +620,7 @@ def _render_chat() -> None:
 
         with st.chat_message("assistant"):
             chat_container = st.empty()
-            with st.status("💬 CSO is answering your follow-up...", expanded=True) as status:
+            with st.status("CSO is answering your follow-up...", expanded=True) as status:
                 result = asyncio.run(
                     _run_followup(
                         st.session_state.user_query,
@@ -623,8 +629,7 @@ def _render_chat() -> None:
                         handler,
                     )
                 )
-                cost = f" — ${handler.total_cost:.2f}" if handler.total_cost else ""
-                status.update(label=f"✅ Follow-up complete{cost}", state="complete")
+                status.update(label="Follow-up complete", state="complete")
 
             chat_container.markdown(result)
 
@@ -648,11 +653,11 @@ def _render_chat() -> None:
         followup_mode = st.session_state.get("followup_mode", True)
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("💬 Ask follow-up", type="primary" if followup_mode else "secondary", use_container_width=True):
+            if st.button("Ask follow-up", type="primary" if followup_mode else "secondary", use_container_width=True):
                 st.session_state.followup_mode = True
                 st.rerun()
         with col2:
-            if st.button("🔬 Start new analysis", type="primary" if not followup_mode else "secondary", use_container_width=True):
+            if st.button("Start new analysis", type="primary" if not followup_mode else "secondary", use_container_width=True):
                 st.session_state.followup_mode = False
                 st.rerun()
 
@@ -682,11 +687,11 @@ def _render_chat() -> None:
             reports_container = st.container()
 
             with st.chat_message("assistant"):
-                with st.status("📋 Phase 1: Intelligence briefing + clarification...", expanded=True) as status:
+                with st.status("Phase 1: Intelligence briefing + clarification...", expanded=True) as status:
                     briefing, questions = asyncio.run(_run_phase1(user_input, reports_container))
                     st.session_state.briefing = briefing
                     st.session_state.questions = questions
-                    status.update(label="✅ Phase 1 complete", state="complete")
+                    status.update(label="Phase 1 complete", state="complete")
 
             # Check if Phase 1 failed completely
             phase1_errors = [e for e in st.session_state.errors if e["phase"] == "phase1"]
@@ -716,13 +721,13 @@ def _render_report_panel() -> None:
         st.session_state.selected_report = None
         st.session_state.report_panel_open = False
         st.rerun()
-    st.markdown(f"## {report['icon']} {report['name']}")
+    st.markdown(f"## {report['name']}")
     st.divider()
     st.markdown(report["output"])
 
 
-def main() -> None:
-    st.set_page_config(page_title="Virtual Biotech", page_icon="🧬", layout="wide", initial_sidebar_state="expanded")
+def _analysis_page() -> None:
+    """Main analysis page — chat + reports."""
     _init_session()
     _render_sidebar()
 
@@ -731,6 +736,16 @@ def main() -> None:
         _render_report_panel()
     else:
         _render_chat()
+
+
+def main() -> None:
+    st.set_page_config(page_title="Virtual Biotech", page_icon="🔍", layout="wide", initial_sidebar_state="expanded")
+
+    pages = st.navigation([
+        st.Page(_analysis_page, title="Analysis", icon=":material/science:", default=True),
+        st.Page(mcp_overview.render, title="MCP Overview", icon=":material/database:"),
+    ])
+    pages.run()
 
 
 if __name__ == "__main__":

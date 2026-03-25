@@ -70,11 +70,10 @@ class StreamlitMessageHandler:
     def __init__(self, on_report: ReportCallback | None = None) -> None:
         self.tasks: dict[str, AgentTask] = {}
         self.pending_output: dict[str, str] = {}  # tool_use_id -> task_id
+        self.pending_agent_keys: dict[str, str] = {}  # tool_use_id -> agent key from Agent ToolUseBlock
         self.cso_text_blocks: list[str] = []
         self.status_log: list[str] = []  # timestamped status messages
-        self.total_cost: float = 0.0
         self.total_turns: int = 0
-        self.duration_s: float = 0.0
         self.final_result: str = ""
         self.done: bool = False
         self._on_report = on_report
@@ -117,11 +116,16 @@ class StreamlitMessageHandler:
         task.log.append(f"{ts} {entry}{elapsed}")
 
     def _on_task_started(self, message: TaskStartedMessage) -> None:
-        agent_key = resolve_agent_key(message.description, getattr(message, "task_type", None))
+        # Prefer the agent key captured from the Agent ToolUseBlock (correlated by tool_use_id)
+        agent_key = ""
+        if message.tool_use_id and message.tool_use_id in self.pending_agent_keys:
+            agent_key = self.pending_agent_keys.pop(message.tool_use_id)
+        if not agent_key:
+            agent_key = resolve_agent_key(message.description, getattr(message, "task_type", None))
         task = AgentTask(task_id=message.task_id, description=message.description, agent_key=agent_key)
         self.tasks[message.task_id] = task
-        self._task_log(task, f"▶ Started: {task.display_name}")
-        self._log(f"▶ Started: {task.display_name}")
+        self._task_log(task, f"Started: {task.display_name}")
+        self._log(f"Started: {task.display_name}")
 
     def _on_task_progress(self, message: TaskProgressMessage) -> None:
         task = self.tasks.get(message.task_id)
@@ -129,9 +133,9 @@ class StreamlitMessageHandler:
             task.last_tool = message.last_tool_name
             if message.last_tool_name not in task.tools_used:
                 task.tools_used.append(message.last_tool_name)
-            self._task_log(task, f"⚙ Tool call: `{message.last_tool_name}`")
+            self._task_log(task, f"Tool call: `{message.last_tool_name}`")
         tool_info = f" — {message.last_tool_name}" if message.last_tool_name else ""
-        self._log(f"⋯ Working: {message.description}{tool_info}")
+        self._log(f"Working: {message.description}{tool_info}")
 
     def _on_task_notification(self, message: TaskNotificationMessage) -> None:
         task = self.tasks.get(message.task_id)
@@ -140,12 +144,12 @@ class StreamlitMessageHandler:
             task.summary = message.summary or ""
             if not task.output and task.summary:
                 task.output = task.summary
-            icon = "✅" if message.status == "completed" else "❌"
-            self._task_log(task, f"{icon} {message.status}: {message.summary or ''}")
+            label = "DONE" if message.status == "completed" else "FAIL"
+            self._task_log(task, f"[{label}] {message.status}: {message.summary or ''}")
             self._emit_report(task)
 
-        icon = "✅" if message.status == "completed" else "❌"
-        self._log(f"{icon} {message.summary or message.status}")
+        label = "DONE" if message.status == "completed" else "FAIL"
+        self._log(f"[{label}] {message.summary or message.status}")
 
         # Register for deferred output from UserMessage
         if message.tool_use_id:
@@ -181,13 +185,13 @@ class StreamlitMessageHandler:
             if isinstance(block, TextBlock) and block.text.strip():
                 self.cso_text_blocks.append(block.text)
             elif isinstance(block, ToolUseBlock):
-                self._log(f"🔧 Tool: {block.name}")
+                self._log(f"Tool: {block.name}")
+                # Capture agent key from Agent tool calls for correlation with TaskStartedMessage
+                if block.name == "Agent" and isinstance(block.input, dict) and block.input.get("agent"):
+                    self.pending_agent_keys[block.id] = block.input["agent"]
 
     def _on_result(self, message: ResultMessage) -> None:
-        if message.total_cost_usd:
-            self.total_cost += message.total_cost_usd
         self.total_turns += message.num_turns
-        self.duration_s = message.duration_ms / 1000
         if message.subtype == "success":
             self.final_result = message.result or ""
         else:
