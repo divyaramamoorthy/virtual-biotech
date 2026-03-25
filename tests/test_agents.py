@@ -120,8 +120,7 @@ class TestMCPToolNaming:
             for tool in agent.tools:
                 if tool not in non_mcp_tools:
                     assert tool.startswith("mcp__"), (
-                        f"Agent '{name}' has non-namespaced MCP tool: '{tool}'. "
-                        f"Expected format: mcp__<server>__<tool>"
+                        f"Agent '{name}' has non-namespaced MCP tool: '{tool}'. Expected format: mcp__<server>__<tool>"
                     )
 
     def test_sub_agent_mcp_tools_reference_valid_servers(self):
@@ -138,9 +137,7 @@ class TestMCPToolNaming:
                 parts = tool.split("__")
                 assert len(parts) == 3, f"Agent '{name}' tool '{tool}' doesn't match mcp__<server>__<tool>"
                 server = parts[1]
-                assert server in MCP_SERVERS, (
-                    f"Agent '{name}' references MCP server '{server}' which is not in MCP_SERVERS"
-                )
+                assert server in MCP_SERVERS, f"Agent '{name}' references MCP server '{server}' which is not in MCP_SERVERS"
 
     def test_cso_agent_definition_has_no_mcp_tools(self):
         """CSO AgentDefinition has no tools — it only delegates via Agent tool."""

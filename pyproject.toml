@@ -3,7 +3,7 @@ name = "virtual-biotech"
 version = "0.1.0"
 description = "Multi-agent AI framework for computational drug discovery"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "anthropic>=0.40.0",
     "claude-agent-sdk>=0.1.0",
